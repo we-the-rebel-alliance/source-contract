@@ -141,4 +141,5 @@ The fixture runner records this, and fails if it changes:
   of base64), so a full-size inline image is always `TOO_LARGE`. Options: (a) `maxBytes` counts the answer's bytes,
   and `DATA_URI_MAX` shrinks to fit (about 1 MB of base64 including the envelope, about 760 KB raw; anything larger is
   downscaled or sent as an https `url`); (b) `maxBytes` counts the payload before encoding; (c) an `image` source may
-  declare up to 1.5 MB. *Recommendation:* (a).
+  declare up to 1.5 MB. *Recommendation:* (a). **Adopted by the app in #9**: `image.dataUri` is capped at 1 MB less
+  4 KB, so the whole answer fits in `maxBytes`.

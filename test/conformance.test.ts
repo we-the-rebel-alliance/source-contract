@@ -87,7 +87,7 @@ describe("the page fields Memory's checks read", () => {
   })
 
   test("failed[] holds the cursor back", () => {
-    const held = page({ failed: [{ external_id: "C0PILOT001:1", reason: "RATE_LIMITED" }], cursor: "c2" })
+    const held = page({ failed: [{ external_id: "C0PILOT001:1", code: "RATE_LIMITED" }], cursor: "c2" })
     assert.ok(pageProblems(held, { ...options, input: { cursor: "c1" } }).some((problem) => /holds the cursor back/.test(problem)))
     assert.deepEqual(pageProblems({ ...held, cursor: "c1" }, { ...options, input: { cursor: "c1" } }), [])
     assert.ok(pageProblems(held, options).some((problem) => /holds the cursor back/.test(problem)))
@@ -239,10 +239,10 @@ describe("sourceConformance", () => {
     await context.permission.assert({ action: "slack_events_list" })
     await context.permission.assert({ action: "slack_slack_read_channel" })
     if (input["cursor"] === "c2") {
-      return page({ failed: [{ external_id: "C0PILOT001:2", reason: "RATE_LIMITED" }], cursor: "c2" })
+      return page({ failed: [{ external_id: "C0PILOT001:2", code: "RATE_LIMITED" }], cursor: "c2" })
     }
     if (input["cursor"] === "c3") {
-      return page({ refused: [{ external_id: "C0PILOT001:3", reason: "instruction-shaped text" }], cursor: "c3" })
+      return page({ refused: [{ external_id: "C0PILOT001:3", reason: "instruction" }], cursor: "c3" })
     }
     if (input["cursor"] === "stale") return page({ gap: { reason: "expired", since: ISO }, cursor: "fresh" })
     if (input["cursor"] === "fresh") return page({ cursor: "fresh-2" })

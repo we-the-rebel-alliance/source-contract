@@ -11,6 +11,7 @@
  * source reports its cost.
  */
 import type { SourceItem } from "../schema/types.ts"
+import { REFUSAL_REASONS, secretKinds } from "../events.ts"
 
 /** What a page is checked against. */
 export interface PageOptions {
@@ -53,15 +54,18 @@ export function pageChecks(answer: unknown, options: PageOptions): PageChecks {
   const where = "the page"
   if (!plain(answer)) return { shape: ["the page is not an object"], cursor: [], gap: [], refused: [], cost: [] }
 
-  if (answer["source"] !== options.source.id) shape.push(`${where} names source ${JSON.stringify(answer["source"])}, not ${options.source.id}`)
+  // A page names the source as the plugin's own tool names it (`input.source`, such as gmail), not the dotted contract
+  // id (gws.gmail): §2.2 keeps the two apart, and `events`' SOURCE_PATTERN accepts only the former.
+  const named = typeof options.source.input?.["source"] === "string" ? (options.source.input["source"] as string) : options.source.id
+  if (answer["source"] !== named) shape.push(`${where} names source ${JSON.stringify(answer["source"])}, not ${named}`)
   if (answer["plugin"] !== options.plugin) shape.push(`${where} names plugin ${JSON.stringify(answer["plugin"])}, not ${options.plugin}`)
   if (typeof answer["cursor"] !== "string") shape.push(`${where} cursor must be a string`)
   if (typeof answer["more"] !== "boolean") shape.push(`${where} more must be true or false`)
 
   const events = answer["events"]
   if (!Array.isArray(events)) shape.push(`${where} events must be a list`)
-  const refusedEntries = entries(answer["refused"], `${where} refused`, shape)
-  const failed = entries(answer["failed"], `${where} failed`, shape)
+  const refusedEntries = entries(answer["refused"], `${where} refused`, shape, "refused")
+  const failed = entries(answer["failed"], `${where} failed`, shape, "failed")
   gapChecks(answer["gap"], where, gap)
   costChecks(answer["cost"], options.source, where, cost)
 
@@ -72,6 +76,11 @@ export function pageChecks(answer: unknown, options: PageOptions): PageChecks {
       continue
     }
     seen.add(event["external_id"])
+    // The family's screening, used here so a fixture proves it: an event carrying a secret belongs in refused[].
+    const kinds = secretKinds([event["title"], event["text"]].filter((value) => typeof value === "string").join("\n"))
+    if (kinds.length > 0) {
+      refused.push(`${where} lists ${event["external_id"]} as an event, and its text holds a secret (${kinds.join(", ")}): it belongs in refused[] with reason "secret"`)
+    }
   }
   for (const id of new Set(refusedEntries)) {
     if (seen.has(id)) refused.push(`${where} lists ${id} as an event and in refused[]: a refusal is final`)
@@ -97,9 +106,10 @@ export function pageProblems(answer: unknown, options: PageOptions): string[] {
 
 /**
  * `refused[]` or `failed[]`: each entry a final or retryable drop, with the id and the reason. Absent is fine: a source
- * that never drops anything may omit the list.
+ * that never drops anything may omit the list. The fields are the `events` module's: a refusal's `reason` is one of
+ * `REFUSAL_REASONS` and its `detail` is optional, and a failure's `code` is an error code.
  */
-function entries(value: unknown, where: string, problems: string[]): string[] {
+function entries(value: unknown, where: string, problems: string[], kind: "refused" | "failed"): string[] {
   if (value === undefined) return []
   if (!Array.isArray(value)) {
     problems.push(`${where} must be a list`)
@@ -111,7 +121,16 @@ function entries(value: unknown, where: string, problems: string[]): string[] {
       problems.push(`${where}[${index}] must name the external_id it dropped`)
       continue
     }
-    if (typeof entry["reason"] !== "string" || entry["reason"] === "") problems.push(`${where}[${index}] names no reason`)
+    if (kind === "refused") {
+      if (!(REFUSAL_REASONS as readonly unknown[]).includes(entry["reason"])) {
+        problems.push(`${where}[${index}] names no reason: a refusal is one of ${REFUSAL_REASONS.join(", ")}`)
+      }
+      if (entry["detail"] !== undefined && (typeof entry["detail"] !== "string" || entry["detail"].length > 200 || /\n/.test(entry["detail"]))) {
+        problems.push(`${where}[${index}].detail must be one line of at most 200 characters`)
+      }
+    } else if (typeof entry["code"] !== "string" || !/^[A-Z][A-Z0-9_]*$/.test(entry["code"])) {
+      problems.push(`${where}[${index}].code must be an error code such as RATE_LIMITED`)
+    }
     found.push(entry["external_id"])
   }
   return found

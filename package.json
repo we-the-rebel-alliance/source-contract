@@ -1,0 +1,47 @@
+{
+  "name": "@we-the-rebel-alliance/source-contract",
+  "version": "0.1.0",
+  "description": "One source contract for every plugin and every project: the data model, the descriptor, the protocol, the library and the conformance kit.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/we-the-rebel-alliance/source-contract.git"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./schemas": {
+      "types": "./dist/schemas.d.ts",
+      "default": "./dist/schemas.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "npm run test:node && npm run test:bun",
+    "test:node": "node --test \"test/**/*.test.ts\"",
+    "test:bun": "bun test ./test",
+    "check:dist": "node scripts/check-dist.mjs",
+    "conformance:self-test": "node scripts/conformance-self-test.mjs",
+    "check": "npm run typecheck && npm run build && npm run check:dist && npm test && npm run conformance:self-test"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3",
+    "zod": "4.6.7"
+  }
+}

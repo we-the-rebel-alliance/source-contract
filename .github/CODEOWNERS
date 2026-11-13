@@ -1,0 +1,12 @@
+# Who reviews what (design §3, app#2346). The last matching line wins.
+#
+# joe-broadhead owns everything: the app's parts (the repository, build and release, descriptor, registry, permission,
+# read, broker-client), Memory's (schema and conformance) and the plugin family's (events, cursor, tools-rpc).
+# domeevans (Artifacts) reviews params and pick, seeded from Artifacts' relative-time resolver and field picker.
+
+*                         @joe-broadhead
+
+/src/params.ts            @joe-broadhead @domeevans
+/src/pick.ts              @joe-broadhead @domeevans
+/test/params.test.ts      @joe-broadhead @domeevans
+/test/pick.test.ts        @joe-broadhead @domeevans

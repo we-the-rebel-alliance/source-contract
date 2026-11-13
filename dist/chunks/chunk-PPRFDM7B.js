@@ -2,7 +2,7 @@
 import {
   findSource,
   maxBytesOf
-} from "./chunk-ZQI5K3R5.js";
+} from "./chunk-LX36WAGC.js";
 import {
   ERROR_CODES,
   PAGE,
@@ -22,7 +22,7 @@ import {
   grantCovers,
   probeRules,
   sessionRules
-} from "./chunk-F2EQTQXI.js";
+} from "./chunk-VLCPYVNB.js";
 import {
   pick,
   pickProblemsForOutput
@@ -58,6 +58,7 @@ function failureFromError(error) {
 }
 
 // src/read.ts
+var rpcOf = (installed) => installed.sources.rpc === void 0 ? {} : { rpc: installed.sources.rpc };
 var plain = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var refused = (code, what, next) => ({ ok: false, failure: failure(code, what, next) });
 var bytes = (value) => new TextEncoder().encode(JSON.stringify(value)).length;
@@ -137,7 +138,7 @@ async function read(host, request) {
   const called = await fencedCall(
     host,
     sessionRules(source, request.grant),
-    { package: request.installed.package, method: source.tool, input, ...request.signal ? { signal: request.signal } : {} },
+    { package: request.installed.package, ...rpcOf(request.installed), method: source.tool, input, ...request.signal ? { signal: request.signal } : {} },
     `${request.consumer} reads ${source.id}`
   );
   if (!called.ok) return { ok: false, failure: called.failure };
@@ -202,7 +203,7 @@ async function readDetail(host, request) {
   const called = await fencedCall(
     host,
     detailRules(source, request.detail, grant),
-    { package: installed.package, method: detail.tool, input: { account: grant.account, scope, fields: fields.value }, ...request.signal ? { signal: request.signal } : {} },
+    { package: installed.package, ...rpcOf(installed), method: detail.tool, input: { account: grant.account, scope, fields: fields.value }, ...request.signal ? { signal: request.signal } : {} },
     `${request.consumer} reads ${request.detail}`
   );
   if (!called.ok) return called;
@@ -212,10 +213,16 @@ async function readDetail(host, request) {
 async function probe(host, request) {
   const source = findSource(request.installed.sources, request.source);
   if (!source) return { ok: false, failure: failure("UNAVAILABLE", `${request.installed.package} declares no source ${request.source}`, "Check the source id.") };
+  const declared = source.permission.identity;
+  const identity = declared ?? request.identityOperations;
+  if (identity === void 0) {
+    return { ok: false, failure: failure("PERMISSION_DENIED", `${source.id} declares no identity operations, and none were given`, "Declare permission.identity in the source, or pass the identity operations.") };
+  }
+  const name = typeof source.input?.["source"] === "string" ? { source: source.input["source"] } : {};
   const called = await fencedCall(
     host,
-    probeRules(source, request.account, request.identityOperations),
-    { package: request.installed.package, method: "probe", input: { ...source.input ?? {}, account: request.account }, ...request.signal ? { signal: request.signal } : {} },
+    probeRules(source, request.account, identity, request.installed.sources.probe?.action),
+    { package: request.installed.package, ...rpcOf(request.installed), method: "probe", input: { ...name, account: request.account }, ...request.signal ? { signal: request.signal } : {} },
     `probe ${source.id}`
   );
   if (!called.ok) return called;

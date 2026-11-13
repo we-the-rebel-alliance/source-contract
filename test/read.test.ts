@@ -219,6 +219,43 @@ describe("probe", () => {
   })
 })
 
+describe("declared rpc and probe (#4)", () => {
+  const items = gws.sources.items.map((item) => (item.id === "gws.gmail" ? { ...item, permission: { ...item.permission, identity: ["gmail.users.getProfile"] } } : item))
+  const declared: InstalledDescriptor = { ...gws, sources: { ...gws.sources, rpc: "google-workspace.gws.tools", probe: { action: "gws.probe" }, items } }
+
+  test("a read passes the declared tools-RPC id to the host", async () => {
+    let rpc: string | undefined
+    const host: ReadHost = {
+      openSession: async () => ({ sessionID: "s", close: async () => {} }),
+      call: async (request) => {
+        rpc = request.rpc
+        return snapshot
+      },
+    }
+    await read(host, todayRequest({ installed: declared, grant: grantFor("gws.calendar.today", {}, declared) }))
+    assert.equal(rpc, "google-workspace.gws.tools")
+    await read(host, todayRequest())
+    assert.equal(rpc, undefined)
+  })
+
+  test("probe is fenced by the declared action and identity operations, and called with { source, account }", async () => {
+    const fake = fakeHost(() => ({ account: ana, owner: { id: `mailto:${ana}`, label: "Ana" } }), () => [["gws.probe", "*"], ["gws.read", `${ana}:gmail.users.getProfile`]])
+    const answer = await probe(fake.host, { installed: declared, source: "gws.gmail", account: ana })
+    assert.equal(answer.ok, true, answer.ok ? "" : answer.failure.message)
+    assert.deepEqual(fake.calls[0]!.input, { source: "gmail", account: ana })
+    assert.equal(evaluate(fake.calls[0]!.rules, "gws.events_list"), "deny")
+    const reading = fakeHost(() => ({ account: ana, owner: { id: "x", label: "x" } }), () => [["gws.events_list", "*"]])
+    assert.equal(((await probe(reading.host, { installed: declared, source: "gws.gmail", account: ana })) as { ok: boolean }).ok, false)
+  })
+
+  test("probe without declared or given identity operations is refused before any call", async () => {
+    const fake = fakeHost(() => ({}))
+    const outcome = await probe(fake.host, { installed: gws, source: "gws.gmail", account: ana })
+    assert.equal(outcome.ok ? "ok" : outcome.failure.code, "PERMISSION_DENIED")
+    assert.equal(fake.calls.length, 0)
+  })
+})
+
 describe("broker-client", () => {
   const brokerAnswer = (answer: unknown) => {
     const seen: BrokerRequest[] = []

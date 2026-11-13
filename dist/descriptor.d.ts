@@ -15,6 +15,8 @@ export interface SourcePermission {
      * (`slack_read_channel`) is an MCP tool, asserted as `<namespace>_<operation>` on `*` (`permission.operationRule`).
      */
     readonly operations: readonly string[];
+    /** The identity operations `probe` asserts for this source, never among `operations` (#4, point 3). Optional. */
+    readonly identity?: readonly string[];
 }
 /** A detail read: a declared read per event, whose inputs come only from the event's own fields, never its text. */
 export interface SourceDetail {
@@ -74,6 +76,12 @@ export interface SourceItem {
 /** The `sources` key. */
 export interface SourcesDescriptor {
     readonly contractVersion: number;
+    /** The plugin's tools-RPC id, `<OpenCode plugin id>.tools` (#4). Optional; when declared, `read` calls it. */
+    readonly rpc?: string;
+    /** The plugin's one `probe` tool: the permission action it asserts (#4, #8). Optional. */
+    readonly probe?: {
+        readonly action: string;
+    };
     readonly items: readonly SourceItem[];
 }
 /** A descriptor as read from an installed package. */

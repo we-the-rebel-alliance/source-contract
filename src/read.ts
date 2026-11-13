@@ -35,6 +35,8 @@ export interface ReadHost {
    */
   call(request: {
     readonly package: string
+    /** The plugin's declared tools-RPC id (`sources.rpc`), when it declares one; the host checks the package owns it. */
+    readonly rpc?: string
     readonly method: string
     readonly sessionID: string
     readonly input: Readonly<Record<string, unknown>>
@@ -90,6 +92,9 @@ export type ReadOutcome =
   | { readonly ok: true; readonly kind: "events"; readonly page: EventsPage }
   | { readonly ok: true; readonly kind: "snapshot"; readonly snapshot: Snapshot }
   | { readonly ok: false; readonly failure: ReadFailure }
+
+/** The declared tools-RPC id, as a `call` field, when the plugin declares one. */
+const rpcOf = (installed: InstalledDescriptor): { rpc?: string } => (installed.sources.rpc === undefined ? {} : { rpc: installed.sources.rpc })
 
 const plain = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
 const refused = (code: Parameters<typeof failure>[0], what: string, next: string): ReadOutcome => ({ ok: false, failure: failure(code, what, next) })
@@ -185,7 +190,7 @@ export async function read(host: ReadHost, request: ReadRequest): Promise<ReadOu
   const called = await fencedCall(
     host,
     sessionRules(source, request.grant),
-    { package: request.installed.package, method: source.tool, input, ...(request.signal ? { signal: request.signal } : {}) },
+    { package: request.installed.package, ...rpcOf(request.installed), method: source.tool, input, ...(request.signal ? { signal: request.signal } : {}) },
     `${request.consumer} reads ${source.id}`,
   )
   if (!called.ok) return { ok: false, failure: called.failure }
@@ -281,7 +286,7 @@ export async function readDetail(host: ReadHost, request: DetailRequest): Promis
   const called = await fencedCall(
     host,
     detailRules(source, request.detail, grant),
-    { package: installed.package, method: detail.tool, input: { account: grant.account, scope, fields: fields.value }, ...(request.signal ? { signal: request.signal } : {}) },
+    { package: installed.package, ...rpcOf(installed), method: detail.tool, input: { account: grant.account, scope, fields: fields.value }, ...(request.signal ? { signal: request.signal } : {}) },
     `${request.consumer} reads ${request.detail}`,
   )
   if (!called.ok) return called
@@ -297,16 +302,24 @@ export interface ProbeAnswer {
 }
 
 /**
- * Probes a source for an account, in a session fenced by its probe rules: the source's own action and the identity
- * operations the caller names (the descriptor does not list them yet; source-contract#4).
+ * Probes a source for an account, in a session fenced by its probe rules: the plugin's declared probe action
+ * (`sources.probe.action`) and the source's declared identity operations (`permission.identity`), or, for a plugin
+ * that declares neither yet, the source's own action and the identity operations the caller passes. The call is the
+ * family's: `probe` with `{ source?, account }`.
  */
-export async function probe(host: ReadHost, request: { readonly installed: InstalledDescriptor; readonly source: string; readonly account: string; readonly identityOperations: readonly string[]; readonly signal?: AbortSignal }): Promise<{ readonly ok: true; readonly answer: ProbeAnswer } | { readonly ok: false; readonly failure: ReadFailure }> {
+export async function probe(host: ReadHost, request: { readonly installed: InstalledDescriptor; readonly source: string; readonly account: string; readonly identityOperations?: readonly string[]; readonly signal?: AbortSignal }): Promise<{ readonly ok: true; readonly answer: ProbeAnswer } | { readonly ok: false; readonly failure: ReadFailure }> {
   const source = findSource(request.installed.sources, request.source)
   if (!source) return { ok: false, failure: failure("UNAVAILABLE", `${request.installed.package} declares no source ${request.source}`, "Check the source id.") }
+  const declared = source.permission.identity
+  const identity = declared ?? request.identityOperations
+  if (identity === undefined) {
+    return { ok: false, failure: failure("PERMISSION_DENIED", `${source.id} declares no identity operations, and none were given`, "Declare permission.identity in the source, or pass the identity operations.") }
+  }
+  const name = typeof source.input?.["source"] === "string" ? { source: source.input["source"] } : {}
   const called = await fencedCall(
     host,
-    probeRules(source, request.account, request.identityOperations),
-    { package: request.installed.package, method: "probe", input: { ...(source.input ?? {}), account: request.account }, ...(request.signal ? { signal: request.signal } : {}) },
+    probeRules(source, request.account, identity, request.installed.sources.probe?.action),
+    { package: request.installed.package, ...rpcOf(request.installed), method: "probe", input: { ...name, account: request.account }, ...(request.signal ? { signal: request.signal } : {}) },
     `probe ${source.id}`,
   )
   if (!called.ok) return called

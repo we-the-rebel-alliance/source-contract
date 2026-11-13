@@ -56,11 +56,18 @@ describe("version 2, bound to (plugin, source, account, scope)", () => {
     for (const bad of ["", "not a cursor", "%%%", b64("text"), "a".repeat(MAX_CURSOR_LENGTH + 1)]) expect(decodeBoundCursor(BINDING, bad), bad).toEqual({ ok: false, reason: "malformed" })
   })
 
-  test("refuses a version 1 cursor unless acceptV1, and then only the same source's, marked legacy", () => {
+  test("refuses a version 1 cursor unless acceptV1, and then only the same source's, for the whole source, marked legacy", () => {
     const v1 = encodeCursor("gmail", { a: "personal", h: "1010" })
-    expect(decodeBoundCursor(BINDING, v1)).toEqual({ ok: false, reason: "foreign" })
-    expect(decodeBoundCursor(BINDING, v1, { acceptV1: true })).toEqual({ ok: true, state: { a: "personal", h: "1010" }, legacy: true })
-    expect(decodeBoundCursor(BINDING, encodeCursor("slack", {}), { acceptV1: true })).toEqual({ ok: false, reason: "foreign" })
+    expect(decodeBoundCursor(WHOLE, v1)).toEqual({ ok: false, reason: "foreign" })
+    expect(decodeBoundCursor(WHOLE, v1, { acceptV1: true })).toEqual({ ok: true, state: { a: "personal", h: "1010" }, legacy: true })
+    expect(decodeBoundCursor({ ...WHOLE, scope: {} }, v1, { acceptV1: true })).toEqual({ ok: true, state: { a: "personal", h: "1010" }, legacy: true })
+    expect(decodeBoundCursor(WHOLE, encodeCursor("slack", {}), { acceptV1: true })).toEqual({ ok: false, reason: "foreign" })
+  })
+
+  test("refuses a version 1 cursor for a scoped read, even with acceptV1: a scope change starts again", () => {
+    const v1 = encodeCursor("gmail", { a: "personal", h: "1010" })
+    expect(decodeBoundCursor(BINDING, v1, { acceptV1: true })).toEqual({ ok: false, reason: "foreign" })
+    expect(decodeBoundCursor({ ...WHOLE, scope: { label: [] } }, v1, { acceptV1: true })).toEqual({ ok: false, reason: "foreign" })
   })
 
   test("refuses a reserved state key, and a cursor over 1024 characters, as bugs in the source", () => {

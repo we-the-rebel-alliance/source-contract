@@ -132,13 +132,20 @@ export type DecodedCursor =
 /**
  * The state `encodeBoundCursor` stored for `binding`. A cursor of another plugin, source, account or scope is
  * `foreign`; one that is not base64url JSON of an object is `malformed`. With `acceptV1`, a contract 1 cursor of the
- * same source decodes with `legacy: true`, and its account binding is the source's own to check. Either refusal is
+ * same source decodes with `legacy: true`, but only when the binding's scope is empty (the whole source): a contract 1
+ * cursor was issued for the whole source, so a scoped read, or any change of scope, refuses it and the consumer starts
+ * the scoped read again with `since`. Its account binding is the source's own to check. Either refusal is
  * `CURSOR_INVALID` to the caller.
+ *
+ * The binding hash catches mix-ups (a cursor sent to the wrong source, account or scope); it is not a signature. A
+ * consumer that holds a cursor can forge another binding's, so a source still checks the cursor's state against what
+ * it reads, and the grant, not the cursor, decides what may be read.
  */
 export function decodeBoundCursor(binding: CursorBinding, cursor: string, options: { readonly acceptV1?: boolean } = {}): DecodedCursor {
   const parsed = parse(cursor)
   if (!parsed) return { ok: false, reason: "malformed" }
   if (parsed["v"] === CURSOR_V1 && options.acceptV1 === true) {
+    if (Object.keys(canonicalScope(binding.scope)).length > 0) return { ok: false, reason: "foreign" }
     const state = decodeCursor(binding.source, cursor)
     return state ? { ok: true, state, legacy: true } : { ok: false, reason: "foreign" }
   }

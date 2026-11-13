@@ -1,4 +1,5 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
+import "./chunks/chunk-HLVAKAYG.js";
 
 // src/index.ts
 var CONTRACT_VERSION = 1;

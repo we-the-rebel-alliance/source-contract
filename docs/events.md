@@ -70,6 +70,26 @@ The fixture runner records this, and fails if it changes:
   zod into its bundle); `read`'s `EventsPage` type and `SourceEvent`/`EventsListResult` here (`read` returns the
   page as the plugin answered it); `permission`'s `Grant.scope` (lists only) and `Scope` here (a value or a list, D12).
 
+## Probe (source-contract#8, #4)
+
+`probe` is one tools-RPC method per plugin (`PROBE`), called per source, as `probe({ source?, account? })`
+(`parseProbeInput` refuses anything else). It answers `ProbeResult`:
+`{ source, account, owner: { id, label }, scopes?, cost?, trust: "untrusted" }` (`probeResult` builds it).
+
+- `owner.id` is what a host keys its cache on, and what `$me` resolves to.
+- `scopes` are the provider sign-in's scopes.
+- `cost` is what a billed source (X) charged for the probe, from its own price table.
+
+`probeResultProblems` refuses any other field, so a probe that returned content fails. It also requires
+`owner.label` (D8). Which permission a probe runs under is the descriptor's to declare (Memory's schema, #4 point 3).
+
+## Extension kinds (D13, source-contract#15)
+
+An `x-<namespace>/<kind>` belongs to the source whose id starts with `<namespace>`: `x-jelly/routine-run` only for a
+`jelly.*` source. This is the rule Memory's schema applies to `reads` in #18. `isEventKindIn(kind, namespace)` checks
+it, `sourceNamespace` gives a source id's namespace, and `eventsListConformance`'s `namespace` option applies it to
+every page. `isEventKind` alone still accepts any well-formed extension.
+
 ## Cursors: what the binding does and does not do
 
 - **`acceptV1`, for the whole source only.** A contract 1 cursor was issued for the whole source. `decodeBoundCursor`

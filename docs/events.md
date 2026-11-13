@@ -30,7 +30,7 @@ copy's import path. `src/events.ts` is the entry; the code is under `src/interna
 | `failed[]`: retryable drops; any entry holds the cursor back | — | `FailedEvent { external_id, code, retryAfterSec? }`, validated on the page. The rule that it holds the cursor is the consumer's; its check is Memory's (`hooks.after`). | done; seam |
 | `gap: { reason: "expired" \| "window-truncated", since }` when history is lost | — | `EventsGap`, exactly those two keys. `SourceError` carries `gap` for `CURSOR_EXPIRED`. | done; D4 |
 | `cost`: what the provider reported, for billed sources | — | `EventsCost { units: [{ per, count }], usd? }`. `per` names the descriptor's `cost.units[].per`. | done; D6 |
-| Cursor: opaque, versioned, bound to `(plugin, source, account, scope)`; foreign → `CURSOR_INVALID`; lost history → `CURSOR_EXPIRED` with `gap` | version 1, bound to the source only. Each plugin binds the rest in its own state (6 of 9 put the account in `a`; linear, slack and x bind only an owner hash in `o`, which all 9 carry). | `src/cursor`: version 2, `encodeBoundCursor` / `decodeBoundCursor`, with a 16-hex hash of the canonical binding. `acceptV1` reads the version 1 cursors collectors already hold. Conformance option `binding`: the same state rebound to another plugin, account or scope must be refused. | done; D12 |
+| Cursor: opaque, versioned, bound to `(plugin, source, account, scope)`; foreign → `CURSOR_INVALID`; lost history → `CURSOR_EXPIRED` with `gap` | version 1, bound to the source only. Each plugin binds the rest in its own state (6 of 9 put the account in `a`; linear, slack and x bind only an owner hash in `o`, which all 9 carry). | `src/cursor`: version 2, `encodeBoundCursor` / `decodeBoundCursor`, with a 16-hex hash of the canonical binding. `acceptV1` reads the version 1 cursors collectors already hold, for the whole source only (see "Cursors" below). Conformance option `binding`: the same state rebound to another plugin, account or scope must be refused. | done; D12 |
 | Core kinds + `task`, `file`; extensions `x-<plugin>/<kind>` | 9 kinds | `EVENT_KINDS` (11), `EXTENSION_KIND`, `isEventKind`. Conformance option `kinds`: the descriptor's `reads`. | done; D13 |
 | Errors: the draft's table + `SCOPE_MISSING`, `BUDGET_EXCEEDED`, `SOURCE_DISABLED`; `AUTH_REQUIRED` aliases `NEEDS_SIGN_IN`; the message is `CODE: what happened. Next step: …` | each plugin's own codes | `ERROR_CODES` (12), `ERROR_ALIASES`, `CONTRACT1_CODES` (the family's `EVENTS_*` names), `canonicalCode`, `SourceError`, `parseSourceError`. Conformance option `codes`. | done; D3 |
 | `events_list` input `scope?` | refused as an unknown field | accepted only when the source declares `scopeKeys` (`parseEventsListInput(input, { scopeKeys })`), so a source that cannot narrow never silently reads more. Keys and values are checked, and the scope is canonicalised. Optional echo on the page (`scope`); conformance option `scopeEcho`. | done; D7 |
@@ -63,11 +63,24 @@ The fixture runner records this, and fails if it changes:
   through `read` (D8), where `read`'s `EventsPage` type had it optional.
 - **One `maxBytes` pair.** `descriptor`'s `DEFAULT_MAX_BYTES` and `MAX_BYTES_LIMIT` are `MAX_BYTES.default` and
   `MAX_BYTES.max` from here.
-- **`reads` is an event kind.** `descriptor` checks a source's `reads` with `isEventKind` (a core kind or
-  `x-<plugin>/<kind>`). It names one kind, while github lists four (D15).
+- **`reads` is an event kind, PROVISIONALLY.** `descriptor` checks a source's `reads` with `isEventKind` (a core kind
+  or `x-<plugin>/<kind>`), marked PROVISIONAL in the code until D13 and D15 are agreed. It names one kind, while
+  github's one source lists four (D15).
 - **Kept apart, on purpose:** `descriptor`'s `canonicalJson` and the cursor's canonical scope (the cursor must not pull
   zod into its bundle); `read`'s `EventsPage` type and `SourceEvent`/`EventsListResult` here (`read` returns the
   page as the plugin answered it); `permission`'s `Grant.scope` (lists only) and `Scope` here (a value or a list, D12).
+
+## Cursors: what the binding does and does not do
+
+- **`acceptV1`, for the whole source only.** A contract 1 cursor was issued for the whole source. `decodeBoundCursor`
+  accepts one, with `acceptV1`, only when the binding's scope is empty (absent or `{}`). For a scoped read, or after
+  any change of scope, it is refused (`CURSOR_INVALID`), and the consumer starts the scoped read again with `since`.
+  A scope change never resumes from an old cursor.
+- **The binding hash catches mix-ups; it does not stop forgery.** The hash makes a cursor sent to the wrong plugin,
+  source, account or scope fail loudly. It is not a signature: anyone holding a cursor can decode it and encode the
+  same state under another binding. A source therefore still checks the cursor's state against what it reads (as the
+  nine plugins do with their owner hash `o`), and the person's grant, enforced by the fenced session, decides what
+  may be read. A cursor never widens access (D18).
 
 ## Decisions needed
 
@@ -109,5 +122,23 @@ The fixture runner records this, and fails if it changes:
   the conformance check it against the descriptor?
 - **D14. Who owns `src/internal/secrets.ts`.** It is Memory's code in a family-owned module. *Proposal:* both CODEOWNERS, with the
   same test vectors on both sides.
-- **D15. One kind or several.** The descriptor's `reads` is one kind; github's source lists `commit`, `event`, `issue`
-  and `pr`. Either `reads` takes a list, or github declares one source per kind.
+- **D15. One kind or several.** The descriptor's `reads` is one string, and the provisional check in `descriptor` takes
+  one kind; github's one source lists `commit`, `event`, `issue` and `pr`. Options: (a) `reads` takes a list, or (b)
+  `reads` stays one kind and github declares one source per kind (`github.commits`, `github.issues`, …).
+  *Recommendation:* (b), which keeps `reads` a string as the descriptor and its examples have it, and lets a person
+  consent per kind.
+- **D16. Which string `CursorBinding.plugin` is.** (a) the npm package name, (b) the descriptor's source-id prefix
+  (`gws` in `gws.gmail`), or (c) the tools-RPC plugin id (`google-workspace.gws`). The hash covers it, so renaming it
+  invalidates every cursor of that plugin. *Recommendation:* (b), the descriptor's prefix. It is the stable id
+  grants already use, and a package rename or a new RPC id does not move it.
+- **D17. `acceptV1` with a scope.** This is decided here, and needs confirmation: accepted only for an empty scope, refused for
+  any scoped read (see "Cursors"). *Recommendation:* keep this rule, and drop `acceptV1` one release after the plugins move.
+- **D18. Forgery.** (a) the binding hash only, with the source checking its state and the grant fencing the read (as
+  now), or (b) a keyed MAC with a plugin-held secret. *Recommendation:* (a) for v1. A forged cursor can only point a
+  read inside what the grant already allows, and (b) needs key storage in every plugin.
+- **R1. `maxBytes` and images (the app's `registry` decision).** `read` checks `maxBytes` against the answer's JSON
+  bytes, and §2.2 caps `maxBytes` at 1 MB. But `registry`'s `image` allows a `dataUri` of 1 MB of image (about 1.4 MB
+  of base64), so a full-size inline image is always `TOO_LARGE`. Options: (a) `maxBytes` counts the answer's bytes,
+  and `DATA_URI_MAX` shrinks to fit (about 1 MB of base64 including the envelope, about 760 KB raw; anything larger is
+  downscaled or sent as an https `url`); (b) `maxBytes` counts the payload before encoding; (c) an `image` source may
+  declare up to 1.5 MB. *Recommendation:* (a).

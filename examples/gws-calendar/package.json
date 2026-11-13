@@ -1,0 +1,76 @@
+{
+  "name": "@joe-broadhead/opencode-gws",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Example: the gws plugin's Calendar sources as contract version 1 declares them. Every address and meeting is invented.",
+  "sources": {
+    "contractVersion": 1,
+    "items": [
+      {
+        "id": "gws.calendar",
+        "kind": "events",
+        "reads": "meeting",
+        "tool": "events_list",
+        "input": {
+          "source": "calendar"
+        },
+        "accounts": {
+          "named": true
+        },
+        "scope": {
+          "keys": [
+            "calendars"
+          ],
+          "describe": "Which calendars to read. The primary calendar is the default."
+        },
+        "permission": {
+          "events": "gws.events_list",
+          "operations": [
+            "calendar.calendarList.get",
+            "calendar.events.list"
+          ]
+        },
+        "private": true,
+        "cost": {
+          "class": "free"
+        },
+        "maxBytes": 262144,
+        "retentionDays": 30,
+        "urlHosts": [
+          "calendar.google.com"
+        ]
+      },
+      {
+        "id": "gws.calendar.today",
+        "kind": "snapshot",
+        "tool": "calendar_today",
+        "output": "agenda",
+        "params": {
+          "window": {
+            "relative": true
+          }
+        },
+        "accounts": {
+          "named": true
+        },
+        "permission": {
+          "tool": "gws.calendar_today",
+          "operations": [
+            "calendar.calendars.get",
+            "calendar.events.list"
+          ]
+        },
+        "private": true,
+        "cost": {
+          "class": "free"
+        },
+        "maxAgeSec": 900,
+        "maxBytes": 65536,
+        "urlHosts": [
+          "calendar.google.com"
+        ]
+      }
+    ]
+  }
+}

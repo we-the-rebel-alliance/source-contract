@@ -1,0 +1,45 @@
+/**
+ * The conformance kit: what a source plugin's declaration must satisfy, and the checks that prove it against the
+ * plugin's own answers.
+ *
+ * The package's `conformance` entry exports it:
+ *
+ *   const report = await sourceConformance({ plugin, source, tools, calls, cases })
+ *   assertConformance(report)
+ *
+ * The kit takes page results, cursors and permission contexts as inputs. It defines no page, cursor, permission or
+ * descriptor of its own: those are the `events`, `cursor`, `permission`, `read` and `descriptor` modules' work, and a
+ * plugin under test supplies what it can genuinely answer.
+ *
+ * The rules a JSON Schema cannot express are `declarationProblems`: the read-verb and joiner lists, the namespace of an
+ * action, the `urlHosts` suffix rules, and uniqueness. Everything the generated schema can carry is in `./schema`.
+ */
+export { assertDeclaration, declarationProblems, nameProblem, operationProblem, readVerbProblem, urlHostProblem } from "./internal/conformance/rules.ts"
+export { CORE_KINDS, DETAIL_FIELDS, EVENT_FIELDS, JOINERS, READ_VERBS, WRITE_VERBS } from "./internal/conformance/rules.ts"
+export type { DeclarationOptions, ToolDeclaration } from "./internal/conformance/rules.ts"
+
+export { assertionMatches, grantsFor, recordingPermission, sameResource, unusedGrants } from "./internal/conformance/permission.ts"
+export type { AssertInput, Assertion, Grant, RecordingPermission, SessionContext } from "./internal/conformance/permission.ts"
+
+export { instant, pageChecks, pageProblems } from "./internal/conformance/page.ts"
+export type { PageChecks, PageOptions } from "./internal/conformance/page.ts"
+
+export { probeProblems } from "./internal/conformance/probe.ts"
+
+export { SENTINEL, detailInput, detailInputProblems, scopeProblems, syntheticEvent } from "./internal/conformance/details.ts"
+export type { DetailCallInput } from "./internal/conformance/details.ts"
+
+export { suggestProblems } from "./internal/conformance/suggest.ts"
+export type { ScopeOption } from "./internal/conformance/suggest.ts"
+
+export { assertConformance, sourceConformance } from "./internal/conformance/kit.ts"
+export type {
+  CaseExpectation,
+  ConformanceCalls,
+  ConformanceCheck,
+  ConformanceReport,
+  DetailCase,
+  PageCase,
+  Refusal,
+  SourceConformanceOptions,
+} from "./internal/conformance/kit.ts"

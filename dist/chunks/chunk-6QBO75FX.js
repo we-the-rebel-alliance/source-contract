@@ -32,7 +32,7 @@ var SOURCE_ID = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/;
 var METHOD = /^[A-Za-z0-9_.-]{1,100}$/;
 var ACTION = /^[A-Za-z0-9_.-]{1,200}$/;
 var OPERATION = /^[A-Za-z0-9_.-]{1,200}$/;
-var DETAIL_FIELDS = ["external_id", "thread", "thread_channel", "thread_ts"];
+var DETAIL_FIELDS = ["external_id", "kind", "occurred_at", "url", "thread", "actors", "labels", "hash"];
 var action = string().regex(ACTION, "must be a permission action, such as gws.events_list");
 var operation = string().regex(OPERATION, "must be an operation name of letters, digits, dots, underscores or hyphens");
 var price = object({ per: string().min(1).max(40), usd: number().nonnegative().finite() });
@@ -52,20 +52,16 @@ var item = looseObject({
     looseObject({
       id: string().regex(SOURCE_ID),
       tool: string().regex(METHOD),
-      from: array(_enum(DETAIL_FIELDS)).min(1),
-      within: string().optional(),
-      permission: looseObject({ tool: action, operations: array(operation).optional(), operationAction: action.optional() }).optional()
+      from: array(_enum(DETAIL_FIELDS)).min(1)
     })
   ).optional(),
   permission: looseObject({
     events: action.optional(),
     tool: action.optional(),
-    operations: array(operation).min(1, "must name at least one operation: grants and off switches key on them"),
-    operationAction: action.optional(),
-    probe: looseObject({ action, operations: array(operation).optional() }).optional()
+    operations: array(operation).min(1, "must name at least one operation: grants and off switches key on them")
   }),
   private: boolean().optional(),
-  cost: looseObject({ class: _enum(["free", "metered", "billed"]), units: array(price).optional(), probe: price.optional() }).optional(),
+  cost: looseObject({ class: _enum(["free", "metered", "billed"]), units: array(price).optional(), probe: price.optional() }),
   cadence: looseObject({ providerMinMinutes: number().int().positive().optional() }).optional(),
   maxBytes: number().int().positive().max(MAX_BYTES_LIMIT, `must be at most ${MAX_BYTES_LIMIT} (1 MB)`).optional(),
   maxAgeSec: number().int().positive().optional(),
@@ -86,16 +82,6 @@ var item = looseObject({
   if (source.permission.events !== void 0 && source.permission.tool !== void 0) problem(["permission"], "name one method action: events or tool, not both");
   if (source.cost?.class === "billed" && (source.cost.units === void 0 || source.cost.units.length === 0)) {
     problem(["cost", "units"], "a billed source must state its price units");
-  }
-  const keys = source.scope?.keys ?? [];
-  for (const [index, detail] of (source.details ?? []).entries()) {
-    if (detail.from.includes("thread_ts") && !detail.from.includes("thread_channel")) {
-      problem(["details", index, "from"], "a thread_ts input must come with its thread_channel, so the thread stays in the confirmed scope");
-    }
-    if (detail.within !== void 0 && !keys.includes(detail.within)) problem(["details", index, "within"], `"${detail.within}" is not one of the source's scope keys`);
-    if (detail.from.includes("thread_channel") && detail.within === void 0) {
-      problem(["details", index, "within"], "a detail read that takes a channel must say which scope key holds the confirmed channels");
-    }
   }
 });
 var sources = looseObject({
@@ -169,6 +155,7 @@ function maxBytesOf(source) {
 export {
   MAX_BYTES_LIMIT,
   DEFAULT_MAX_BYTES,
+  DETAIL_FIELDS,
   checkSources,
   canonicalJson,
   descriptorHash,

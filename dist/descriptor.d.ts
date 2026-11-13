@@ -9,32 +9,19 @@ export interface SourcePermission {
     readonly events?: string;
     /** A snapshot source's method action, such as `gws.calendar_today`. */
     readonly tool?: string;
-    /** What the read does at the provider: what grants and a person's off switches key on. */
-    readonly operations: readonly string[];
     /**
-     * The action each operation is asserted under, on the resource `<account>:<operation>`, such as `gws.read`. Without
-     * it, each operation is itself an action, asserted on `*` (an MCP tool such as `slack_slack_read_channel`).
+     * What the read does at the provider: what grants and a person's off switches key on. A dotted operation
+     * (`gmail.users.messages.get`) is asserted as `<namespace>.read` on `<account>:<operation>`; a bare one
+     * (`slack_read_channel`) is an MCP tool, asserted as `<namespace>_<operation>` on `*` (`permission.operationRule`).
      */
-    readonly operationAction?: string;
-    /** The source's `probe`: its action and the operations it asserts, which must read no content. */
-    readonly probe?: {
-        readonly action: string;
-        readonly operations?: readonly string[];
-    };
+    readonly operations: readonly string[];
 }
-/** A detail read: a declared read per event, whose inputs come only from the event's API fields. */
+/** A detail read: a declared read per event, whose inputs come only from the event's own fields, never its text. */
 export interface SourceDetail {
     readonly id: string;
     readonly tool: string;
-    /** The event fields its inputs come from: `external_id`, `thread`, `thread_channel` or `thread_ts`. */
+    /** The event fields its input is: `external_id`, `thread`, and the others Memory's schema lists. */
     readonly from: readonly string[];
-    /** The scope key the unit must sit in, such as `channels`: a detail never reads outside the confirmed scope. */
-    readonly within?: string;
-    readonly permission?: {
-        readonly tool: string;
-        readonly operations?: readonly string[];
-        readonly operationAction?: string;
-    };
 }
 /** One source a plugin declares. */
 export interface SourceItem {
@@ -55,12 +42,16 @@ export interface SourceItem {
     readonly scope?: {
         readonly keys: readonly string[];
         readonly describe?: string;
-        readonly suggest?: Readonly<Record<string, unknown>>;
+        /** The read-only tool that lists choices at consent, and the operations it asserts; run only at bind. */
+        readonly suggest?: {
+            readonly tool: string;
+            readonly operations: readonly string[];
+        };
     };
     readonly details?: readonly SourceDetail[];
     readonly permission: SourcePermission;
     readonly private?: boolean;
-    readonly cost?: {
+    readonly cost: {
         readonly class: "free" | "metered" | "billed";
         readonly units?: readonly {
             readonly per: string;
@@ -96,6 +87,8 @@ export interface InstalledDescriptor {
     /** `sha256:` and the hex digest of the canonical JSON of `sources`. */
     readonly hash: string;
 }
+/** The event fields a detail read may take its input from (Memory's schema): identifiers and metadata, never `title` or `text`. */
+export declare const DETAIL_FIELDS: readonly ["external_id", "kind", "occurred_at", "url", "thread", "actors", "labels", "hash"];
 /** The `sources` value checked against the frame; its problems, one sentence each, when it breaks it. */
 export declare function checkSources(value: unknown): Checked<SourcesDescriptor>;
 /** Canonical JSON: object keys sorted at every depth, no spaces. Arrays keep their order. */

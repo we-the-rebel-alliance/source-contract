@@ -93,8 +93,12 @@ const plain = (value: unknown): value is Record<string, unknown> => typeof value
 const refused = (code: Parameters<typeof failure>[0], what: string, next: string): ReadOutcome => ({ ok: false, failure: failure(code, what, next) })
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length
 
-/** The checks before any call: the grant, the source, and every input. The method's input when they pass. */
-function prepare(request: ReadRequest): { source: SourceItem; input: Record<string, unknown> } | ReadOutcome {
+/**
+ * The checks before any call, whoever makes it: the source is declared, the person has not turned it off, the grant is
+ * this consumer's for the descriptor as installed, the scope is within the grant, the inputs suit the source's kind,
+ * and `pick` names paths of its output. The source and the scope to read when they pass.
+ */
+export function checkReadRequest(request: ReadRequest): { readonly source: SourceItem; readonly scope?: Readonly<Record<string, readonly string[]>> } | ReadOutcome {
   const { installed, grant } = request
   const source = findSource(installed.sources, request.source)
   if (!source) return refused("UNAVAILABLE", `${installed.package} ${installed.version} declares no source ${request.source}`, "Check the source id against the installed plugin's sources.")
@@ -107,10 +111,28 @@ function prepare(request: ReadRequest): { source: SourceItem; input: Record<stri
   if (!grantCovers(grant, { source: source.id, account: grant.account, ...(scope === undefined ? {} : { scope }) })) {
     return refused("PERMISSION_DENIED", `the read asks for more of ${source.id} than the person granted`, "Read within the granted scope, or ask the person to widen it.")
   }
-  const input: Record<string, unknown> = { ...(source.input ?? {}), account: grant.account }
-  if (scope !== undefined) input["scope"] = scope
   if (source.kind === "events") {
     if (request.params !== undefined || request.pick !== undefined) return refused("SCHEMA_VIOLATION", "params and pick are for a snapshot source", "Pass cursor, since and limit to an events source.")
+  } else {
+    if (request.cursor !== undefined || request.since !== undefined || request.limit !== undefined) {
+      return refused("SCHEMA_VIOLATION", "cursor, since and limit are for an events source", "Pass params and pick to a snapshot source.")
+    }
+    if (request.pick !== undefined) {
+      const problems = pickProblemsForOutput(source.output ?? "", request.pick)
+      if (problems.length > 0) return refused("SCHEMA_VIOLATION", problems.join("; "), "Pick only paths of the source's output schema.")
+    }
+  }
+  return { source, ...(scope === undefined ? {} : { scope }) }
+}
+
+/** `checkReadRequest`, then the method's input: params, `$me` and `since` resolved. */
+function prepare(request: ReadRequest): { source: SourceItem; input: Record<string, unknown> } | ReadOutcome {
+  const checked = checkReadRequest(request)
+  if ("ok" in checked) return checked
+  const { source, scope } = checked
+  const input: Record<string, unknown> = { ...(source.input ?? {}), account: request.grant.account }
+  if (scope !== undefined) input["scope"] = scope
+  if (source.kind === "events") {
     if (request.since !== undefined) {
       const since = resolveSince(request.since, request.context)
       if (!since.ok) return refused("SCHEMA_VIOLATION", since.problems.join("; "), "Pass since as a relative time such as -7d, or an ISO date-time.")
@@ -120,15 +142,8 @@ function prepare(request: ReadRequest): { source: SourceItem; input: Record<stri
     if (request.limit !== undefined) input["limit"] = request.limit
     return { source, input }
   }
-  if (request.cursor !== undefined || request.since !== undefined || request.limit !== undefined) {
-    return refused("SCHEMA_VIOLATION", "cursor, since and limit are for an events source", "Pass params and pick to a snapshot source.")
-  }
   const params = resolveParams(source.params, request.params, request.context)
   if (!params.ok) return refused("SCHEMA_VIOLATION", params.problems.join("; "), "Pass only the params the source declares, as its descriptor describes them.")
-  if (request.pick !== undefined) {
-    const problems = pickProblemsForOutput(source.output ?? "", request.pick)
-    if (problems.length > 0) return refused("SCHEMA_VIOLATION", problems.join("; "), "Pick only paths of the source's output schema.")
-  }
   return { source, input: { ...input, ...params.value } }
 }
 
@@ -170,30 +185,46 @@ export async function read(host: ReadHost, request: ReadRequest): Promise<ReadOu
     `${request.consumer} reads ${source.id}`,
   )
   if (!called.ok) return { ok: false, failure: called.failure }
-  const problem = checkAnswer(source, request.grant.account, called.answer)
+  return acceptAnswer(source, request.grant.account, called.answer, {
+    ...(request.limit === undefined ? {} : { limit: request.limit }),
+    ...(request.pick === undefined ? {} : { pick: request.pick }),
+  })
+}
+
+/**
+ * A source's answer, checked as the contract says and picked: the account, `trust: "untrusted"`, the size against
+ * `maxBytes`, an events page's shape or a snapshot's output, then `pick`. The same checks whoever made the call: `read`
+ * embedded, or a host's broker (`broker-client`), so a broker never needs to be trusted for shape.
+ */
+export function acceptAnswer(source: SourceItem, account: string, answer: unknown, options: { readonly limit?: number; readonly pick?: readonly string[] } = {}): ReadOutcome {
+  const problem = checkAnswer(source, account, answer)
   if (problem) return { ok: false, failure: problem }
-  const answer = called.answer as Record<string, unknown>
+  const value = answer as Record<string, unknown>
   if (source.kind === "events") {
     // TODO(the family's events PR): check the page with the family's `resultProblems`, with §2.1's additions.
-    if (!Array.isArray(answer["events"]) || typeof answer["cursor"] !== "string" || typeof answer["more"] !== "boolean") {
+    if (!Array.isArray(value["events"]) || typeof value["cursor"] !== "string" || typeof value["more"] !== "boolean") {
       return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s page has no events list, cursor or more`, "Report it to the plugin's maintainers.") }
     }
-    return { ok: true, kind: "events", page: answer as EventsPage }
+    const limit = options.limit ?? 500
+    if (value["events"].length > limit) {
+      return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s page has ${value["events"].length} events, over the limit of ${limit}`, "Report it to the plugin's maintainers.") }
+    }
+    return { ok: true, kind: "events", page: value as EventsPage }
   }
-  const checked = checkOutput(source.output ?? "", answer["data"])
+  const checked = checkOutput(source.output ?? "", value["data"])
   if (!checked.ok) return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s data breaks the ${source.output} schema: ${checked.problems.slice(0, 3).join("; ")}`, "Report it to the plugin's maintainers.") }
-  if (typeof answer["asOf"] !== "string" || !Number.isFinite(Date.parse(answer["asOf"]))) {
+  if (typeof value["asOf"] !== "string" || !Number.isFinite(Date.parse(value["asOf"]))) {
     return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s snapshot has no asOf time`, "Report it to the plugin's maintainers.") }
   }
-  let picked = answer["data"] as Record<string, unknown>
-  if (request.pick !== undefined) {
-    const kept = pick(picked, request.pick)
+  let picked = value["data"] as Record<string, unknown>
+  if (options.pick !== undefined) {
+    const kept = pick(picked, options.pick)
     picked = kept.ok ? kept.data : {}
   }
   return {
     ok: true,
     kind: "snapshot",
-    snapshot: { data: picked, asOf: answer["asOf"], ...(answer["cost"] === undefined ? {} : { cost: answer["cost"] }), trust: "untrusted" },
+    snapshot: { data: picked, asOf: value["asOf"], ...(value["cost"] === undefined ? {} : { cost: value["cost"] }), trust: "untrusted" },
   }
 }
 

@@ -22,13 +22,29 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./broker-client": {
+      "types": "./dist/broker-client.d.ts",
+      "default": "./dist/broker-client.js"
+    },
+    "./descriptor": {
+      "types": "./dist/descriptor.d.ts",
+      "default": "./dist/descriptor.js"
+    },
     "./params": {
       "types": "./dist/params.d.ts",
       "default": "./dist/params.js"
     },
+    "./permission": {
+      "types": "./dist/permission.d.ts",
+      "default": "./dist/permission.js"
+    },
     "./pick": {
       "types": "./dist/pick.d.ts",
       "default": "./dist/pick.js"
+    },
+    "./read": {
+      "types": "./dist/read.d.ts",
+      "default": "./dist/read.js"
     },
     "./registry": {
       "types": "./dist/registry.d.ts",

@@ -1,0 +1,231 @@
+// @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
+import {
+  findSource,
+  maxBytesOf
+} from "./chunk-GTAX4NNR.js";
+import {
+  resolveParams,
+  resolveSince
+} from "./chunk-RYNKNCPP.js";
+import {
+  detailRules,
+  grantCovers,
+  probeRules,
+  sessionRules
+} from "./chunk-36GA4GB4.js";
+import {
+  pick,
+  pickProblemsForOutput
+} from "./chunk-YM6B7BCV.js";
+import {
+  checkOutput
+} from "./chunk-3F4IRHS5.js";
+
+// src/internal/failure.ts
+var FAILURE_CODES = [
+  "NEEDS_SIGN_IN",
+  "ACCOUNT_MISMATCH",
+  "CURSOR_INVALID",
+  "CURSOR_EXPIRED",
+  "RATE_LIMITED",
+  "TOO_LARGE",
+  "SCHEMA_VIOLATION",
+  "PERMISSION_DENIED",
+  "UNAVAILABLE",
+  "SCOPE_MISSING",
+  "BUDGET_EXCEEDED",
+  "SOURCE_DISABLED"
+];
+function failure(code, what, next, retryAfterSec) {
+  return {
+    code,
+    message: `${code}: ${what.replace(/[.\s]+$/, "")}. Next step: ${next}`,
+    next,
+    ...retryAfterSec === void 0 ? {} : { retryAfterSec }
+  };
+}
+var ALIASES = { AUTH_REQUIRED: "NEEDS_SIGN_IN" };
+function failureFromError(error) {
+  const record = typeof error === "object" && error !== null ? error : {};
+  const data = typeof record["data"] === "object" && record["data"] !== null ? record["data"] : {};
+  const message = typeof record["message"] === "string" ? record["message"] : String(error);
+  const raw = [record["code"], data["code"], /^([A-Z][A-Z_]+):/.exec(message)?.[1]].find((code2) => typeof code2 === "string");
+  const code = raw === void 0 ? void 0 : ALIASES[raw] ?? (FAILURE_CODES.includes(raw) ? raw : void 0);
+  const first = message.split(/\r?\n/, 1)[0].slice(0, 300);
+  const next = typeof data["next"] === "string" ? data["next"] : /Next step: (.*)$/.exec(first)?.[1] ?? "Try again later; if it keeps failing, check the plugin's status.";
+  const what = first.replace(/^[A-Z][A-Z_]+:\s*/, "").replace(/\s*Next step:.*$/, "");
+  const retry = typeof record["retryAfterSec"] === "number" ? record["retryAfterSec"] : typeof data["retryAfterSec"] === "number" ? data["retryAfterSec"] : void 0;
+  return failure(code ?? "UNAVAILABLE", what || "the read failed", next, retry);
+}
+
+// src/read.ts
+var plain = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var refused = (code, what, next) => ({ ok: false, failure: failure(code, what, next) });
+var bytes = (value) => new TextEncoder().encode(JSON.stringify(value)).length;
+function prepare(request) {
+  const { installed, grant } = request;
+  const source = findSource(installed.sources, request.source);
+  if (!source) return refused("UNAVAILABLE", `${installed.package} ${installed.version} declares no source ${request.source}`, "Check the source id against the installed plugin's sources.");
+  if (grant.disabled) return refused("SOURCE_DISABLED", `${source.id} is turned off for ${grant.consumer}`, "Turn the source on again to read it.");
+  if (grant.consumer !== request.consumer) return refused("PERMISSION_DENIED", `the grant is ${grant.consumer}'s, not ${request.consumer}'s`, "Ask the person to grant this consumer the source.");
+  if (grant.descriptorHash !== installed.hash) {
+    return refused("PERMISSION_DENIED", `${source.id}'s declaration changed since the person consented`, "Ask the person to review the source and consent again.");
+  }
+  const scope = request.scope ?? grant.scope;
+  if (!grantCovers(grant, { source: source.id, account: grant.account, ...scope === void 0 ? {} : { scope } })) {
+    return refused("PERMISSION_DENIED", `the read asks for more of ${source.id} than the person granted`, "Read within the granted scope, or ask the person to widen it.");
+  }
+  const input = { ...source.input ?? {}, account: grant.account };
+  if (scope !== void 0) input["scope"] = scope;
+  if (source.kind === "events") {
+    if (request.params !== void 0 || request.pick !== void 0) return refused("SCHEMA_VIOLATION", "params and pick are for a snapshot source", "Pass cursor, since and limit to an events source.");
+    if (request.since !== void 0) {
+      const since = resolveSince(request.since, request.context);
+      if (!since.ok) return refused("SCHEMA_VIOLATION", since.problems.join("; "), "Pass since as a relative time such as -7d, or an ISO date-time.");
+      input["since"] = since.value;
+    }
+    if (request.cursor !== void 0) input["cursor"] = request.cursor;
+    if (request.limit !== void 0) input["limit"] = request.limit;
+    return { source, input };
+  }
+  if (request.cursor !== void 0 || request.since !== void 0 || request.limit !== void 0) {
+    return refused("SCHEMA_VIOLATION", "cursor, since and limit are for an events source", "Pass params and pick to a snapshot source.");
+  }
+  const params = resolveParams(source.params, request.params, request.context);
+  if (!params.ok) return refused("SCHEMA_VIOLATION", params.problems.join("; "), "Pass only the params the source declares, as its descriptor describes them.");
+  if (request.pick !== void 0) {
+    const problems = pickProblemsForOutput(source.output ?? "", request.pick);
+    if (problems.length > 0) return refused("SCHEMA_VIOLATION", problems.join("; "), "Pick only paths of the source's output schema.");
+  }
+  return { source, input: { ...input, ...params.value } };
+}
+function checkAnswer(source, account, answer) {
+  const size = bytes(answer);
+  if (size > maxBytesOf(source)) return failure("TOO_LARGE", `${source.id} answered ${size} bytes, over its ${maxBytesOf(source)}`, "Read a smaller window or fewer items.");
+  if (!plain(answer)) return failure("SCHEMA_VIOLATION", `${source.id} answered something that is not an object`, "Report it to the plugin's maintainers.");
+  if (answer["trust"] !== "untrusted") return failure("SCHEMA_VIOLATION", `${source.id}'s answer is not marked trust: "untrusted"`, "Report it to the plugin's maintainers.");
+  if (answer["account"] !== void 0 && answer["account"] !== account) {
+    return failure("ACCOUNT_MISMATCH", `${source.id} answered for another account than the one granted`, "Sign the plugin in to the granted account, or ask the person to grant this one.");
+  }
+  return void 0;
+}
+async function fencedCall(host, rules, call, title) {
+  if (!rules.ok) return { ok: false, failure: failure("PERMISSION_DENIED", rules.problems.join("; "), "Fix the source's declaration or the grant.") };
+  let session;
+  try {
+    session = await host.openSession({ rules: rules.value, title });
+    return { ok: true, answer: await host.call({ ...call, sessionID: session.sessionID }) };
+  } catch (error) {
+    return { ok: false, failure: failureFromError(error) };
+  } finally {
+    await session?.close().catch(() => void 0);
+  }
+}
+async function read(host, request) {
+  const prepared = prepare(request);
+  if ("ok" in prepared) return prepared;
+  const { source, input } = prepared;
+  const called = await fencedCall(
+    host,
+    sessionRules(source, request.grant),
+    { package: request.installed.package, method: source.tool, input, ...request.signal ? { signal: request.signal } : {} },
+    `${request.consumer} reads ${source.id}`
+  );
+  if (!called.ok) return { ok: false, failure: called.failure };
+  const problem = checkAnswer(source, request.grant.account, called.answer);
+  if (problem) return { ok: false, failure: problem };
+  const answer = called.answer;
+  if (source.kind === "events") {
+    if (!Array.isArray(answer["events"]) || typeof answer["cursor"] !== "string" || typeof answer["more"] !== "boolean") {
+      return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s page has no events list, cursor or more`, "Report it to the plugin's maintainers.") };
+    }
+    return { ok: true, kind: "events", page: answer };
+  }
+  const checked = checkOutput(source.output ?? "", answer["data"]);
+  if (!checked.ok) return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s data breaks the ${source.output} schema: ${checked.problems.slice(0, 3).join("; ")}`, "Report it to the plugin's maintainers.") };
+  if (typeof answer["asOf"] !== "string" || !Number.isFinite(Date.parse(answer["asOf"]))) {
+    return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s snapshot has no asOf time`, "Report it to the plugin's maintainers.") };
+  }
+  let picked = answer["data"];
+  if (request.pick !== void 0) {
+    const kept = pick(picked, request.pick);
+    picked = kept.ok ? kept.data : {};
+  }
+  return {
+    ok: true,
+    kind: "snapshot",
+    snapshot: { data: picked, asOf: answer["asOf"], ...answer["cost"] === void 0 ? {} : { cost: answer["cost"] }, trust: "untrusted" }
+  };
+}
+var THREAD = /^[a-z][a-z0-9+.-]*-thread:([^:\s]+):([^:\s]+)$/;
+function detailInput(source, detailId, event, grant) {
+  const detail = source.details?.find((entry) => entry.id === detailId);
+  if (!detail) return { ok: false, problems: [`${source.id} declares no detail read ${detailId}`] };
+  const thread = typeof event["thread"] === "string" ? THREAD.exec(event["thread"]) : null;
+  const fields = {
+    external_id: typeof event["external_id"] === "string" ? event["external_id"] : void 0,
+    thread: typeof event["thread"] === "string" ? event["thread"] : void 0,
+    thread_channel: thread?.[1],
+    thread_ts: thread?.[2]
+  };
+  const input = {};
+  const problems = [];
+  for (const field of detail.from) {
+    const value = fields[field];
+    if (value === void 0) problems.push(`the event has no ${field} for ${detailId}`);
+    else input[field] = value;
+  }
+  if (input["thread_channel"] !== void 0) {
+    const confirmed = detail.within === void 0 ? void 0 : grant.scope?.[detail.within];
+    if (!confirmed?.includes(input["thread_channel"])) problems.push(`the event's channel is not in the confirmed ${detail.within ?? "scope"}`);
+  }
+  return problems.length === 0 ? { ok: true, value: input } : { ok: false, problems };
+}
+async function readDetail(host, request) {
+  const { installed, grant } = request;
+  const source = findSource(installed.sources, request.source);
+  if (!source) return { ok: false, failure: failure("UNAVAILABLE", `${installed.package} declares no source ${request.source}`, "Check the source id.") };
+  if (grant.disabled) return { ok: false, failure: failure("SOURCE_DISABLED", `${source.id} is turned off for ${grant.consumer}`, "Turn the source on again to read it.") };
+  if (grant.consumer !== request.consumer || grant.descriptorHash !== installed.hash) {
+    return { ok: false, failure: failure("PERMISSION_DENIED", `the grant does not cover ${request.consumer}'s read of ${source.id} as installed`, "Ask the person to consent again.") };
+  }
+  if (request.event["account"] !== void 0 && request.event["account"] !== grant.account) {
+    return { ok: false, failure: failure("ACCOUNT_MISMATCH", "the event is another account's", "Read details only for events of the granted account.") };
+  }
+  const input = detailInput(source, request.detail, request.event, grant);
+  if (!input.ok) return { ok: false, failure: failure("PERMISSION_DENIED", input.problems.join("; "), "Read details only for events of the confirmed scope.") };
+  const detail = source.details.find((entry) => entry.id === request.detail);
+  const called = await fencedCall(
+    host,
+    detailRules(source, request.detail, grant),
+    { package: installed.package, method: detail.tool, input: { ...input.value, account: grant.account }, ...request.signal ? { signal: request.signal } : {} },
+    `${request.consumer} reads ${request.detail}`
+  );
+  if (!called.ok) return called;
+  const problem = checkAnswer(source, grant.account, called.answer);
+  return problem ? { ok: false, failure: problem } : { ok: true, answer: called.answer };
+}
+async function probe(host, request) {
+  const source = findSource(request.installed.sources, request.source);
+  if (!source) return { ok: false, failure: failure("UNAVAILABLE", `${request.installed.package} declares no source ${request.source}`, "Check the source id.") };
+  const called = await fencedCall(
+    host,
+    probeRules(source, request.account),
+    { package: request.installed.package, method: "probe", input: { ...source.input ?? {}, account: request.account }, ...request.signal ? { signal: request.signal } : {} },
+    `probe ${source.id}`
+  );
+  if (!called.ok) return called;
+  const answer = called.answer;
+  if (!plain(answer) || typeof answer["account"] !== "string" || !plain(answer["owner"]) || typeof answer["owner"]["id"] !== "string") {
+    return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s probe did not answer an account and an owner`, "Report it to the plugin's maintainers.") };
+  }
+  if (answer["account"] !== request.account) return { ok: false, failure: failure("ACCOUNT_MISMATCH", `${source.id} is signed in to another account`, "Sign the plugin in to the account you mean.") };
+  return { ok: true, answer };
+}
+
+export {
+  read,
+  detailInput,
+  readDetail,
+  probe
+};

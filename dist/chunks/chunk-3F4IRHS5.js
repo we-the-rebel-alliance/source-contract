@@ -6146,6 +6146,14 @@ function object(shape, params) {
   };
   return new ZodObject(def);
 }
+function looseObject(shape, params) {
+  return new ZodObject({
+    type: "object",
+    shape,
+    catchall: unknown(),
+    ...util_exports.normalizeParams(params)
+  });
+}
 var ZodUnion = /* @__PURE__ */ $constructor("ZodUnion", (inst, def) => {
   $ZodUnion.init(inst, def);
   ZodType.init(inst, def);
@@ -6617,6 +6625,16 @@ function checkOutput(name, data) {
 }
 
 export {
+  string2 as string,
+  number2 as number,
+  boolean2 as boolean,
+  unknown,
+  array,
+  object,
+  looseObject,
+  record,
+  _enum,
+  problemsOf,
   OUTPUTS,
   OUTPUT_NAMES,
   isOutputName,

@@ -6,9 +6,9 @@
  *   const installed = readInstalledDescriptor("/path/to/node_modules/@scope/plugin", { version: "1.2.3" })
  *   if (installed.ok) installed.value.hash   // "sha256:…": a grant stores it; a changed descriptor asks again
  *
- * Validation here is the frame this library relies on (ids, kinds, tools, permissions, outputs, sizes). The full
- * descriptor schema, with every refusal Memory's pilots taught, is Memory's `schema` module; when it lands,
- * `checkSources` runs it first (TODO: Memory's schema PR, app#2346 comment 6853236031).
+ * Validation is Memory's descriptor schema (`schema`, `SOURCES_SCHEMA`) first, then this library's frame, which adds
+ * what only the package can check: a snapshot's `output` is a registered schema. The rules a JSON Schema cannot
+ * express (verbs, namespaces, `urlHosts`) are the conformance kit's, which a plugin runs in its own CI.
  */
 import { createHash } from "node:crypto"
 import { existsSync, readFileSync } from "node:fs"
@@ -20,6 +20,7 @@ import { EVENT_KINDS, isEventKind, MAX_BYTES } from "./internal/events.ts"
 import { problemsOf } from "./internal/validator.ts"
 import type { ParamSpec } from "./params.ts"
 import { isOutputName, OUTPUT_NAMES } from "./registry.ts"
+import { SOURCES_SCHEMA } from "./schema.ts"
 
 /** The most bytes a source may declare for one answer (1 MB), and the default when it declares none (64 KB): `events`' `MAX_BYTES`. */
 export const MAX_BYTES_LIMIT: number = MAX_BYTES.max
@@ -182,9 +183,10 @@ const sources = z
     }
   })
 
-/** The `sources` value checked against the frame; its problems, one sentence each, when it breaks it. */
+/** The `sources` value checked against Memory's schema, then the frame; its problems, one sentence each, when it breaks them. */
 export function checkSources(value: unknown): Checked<SourcesDescriptor> {
-  // TODO(Memory's schema PR): run the full descriptor schema first, then this frame.
+  const schema = SOURCES_SCHEMA.check(value)
+  if (!schema.ok) return { ok: false, problems: schema.problems.map((problem) => `sources.${problem}`.replace("sources.the value", "sources")) }
   const result = sources.safeParse(value)
   if (result.success) return { ok: true, value: value as SourcesDescriptor }
   return { ok: false, problems: problemsOf(result.error).map((problem) => `sources.${problem}`.replace("sources.the value", "sources")) }

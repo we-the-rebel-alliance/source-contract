@@ -14,7 +14,8 @@
  * operation is allowed as Memory's schema and conformance kit read it (`operationRule`): a dotted operation as
  * `<namespace>.read` on `<account>:<operation>` (gws: `gws.read` on `ana@example.com:gmail.users.messages.get`), and a
  * bare one, an MCP tool, as `<namespace>_<operation>` on `*` (Slack: `slack_slack_read_channel`). The namespace is the
- * source id's first segment.
+ * source id's first segment. A source whose provider's resources are not `<account>:<operation>` states its grants
+ * verbatim in `permission.rules` (GitHub's `github_api` on `GET /user`), and those are allowed as written.
  *
  * The broker and a project may only narrow these rules, and the plugin's own `access` setting stays final.
  */
@@ -77,8 +78,8 @@ export declare function sessionRules(source: SourceItem, grant: Pick<Grant, "sou
 export declare function detailRules(source: SourceItem, detailId: string, grant: Pick<Grant, "source" | "account">): Checked<readonly PermissionRule[]>;
 /**
  * The session rules for the source's `probe` on `account`: deny everything, then allow the probe's action (the
- * plugin's declared `sources.probe.action`, or else the source's own action) and its identity operations, which read
- * no content and are never among its content operations (Memory's kit checks both).
+ * plugin's declared `sources.probe.action`, or else the source's own action) and its identity operations, which are
+ * among the source's `operations` (#21). That a probe reads no content is the kit's check of its answer.
  */
 export declare function probeRules(source: SourceItem, account: string, identityOperations: readonly string[], probeAction?: string): Checked<readonly PermissionRule[]>;
 /**

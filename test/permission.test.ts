@@ -71,6 +71,28 @@ describe("sessionRules", () => {
   })
 })
 
+describe("verbatim rules (#21)", () => {
+  test("a source that states its grants verbatim is fenced to exactly those", () => {
+    const github = {
+      ...gmail,
+      id: "github.activity",
+      permission: { events: "github.events_list", rules: [{ action: "github_api", resource: "GET /user" }, { action: "github_api", resource: "GET /notifications" }] },
+    } as SourceItem
+    const rules = rulesOf(sessionRules(github, { source: "github.activity", account: "octocat" }))
+    assert.deepEqual(rules, [
+      DENY_ALL,
+      { action: "github.events_list", resource: "*", effect: "allow" },
+      { action: "github_api", resource: "GET /user", effect: "allow" },
+      { action: "github_api", resource: "GET /notifications", effect: "allow" },
+    ])
+    assert.equal(evaluate(rules, "github_api", "DELETE /repos/x"), "deny")
+    const loose = { ...github, permission: { events: "github.events_list", rules: [{ action: "github_api", resource: "GET *" }] } } as SourceItem
+    assert.equal(sessionRules(loose, { source: "github.activity", account: "octocat" }).ok, false)
+    const neither = { ...github, permission: { events: "github.events_list" } } as SourceItem
+    assert.equal(sessionRules(neither, { source: "github.activity", account: "octocat" }).ok, false)
+  })
+})
+
 describe("detail and probe rules", () => {
   test("a detail read runs under the source's own rules", () => {
     const rules = detailRules(slack, "slack.workspace.thread", { source: "slack.workspace", account: "T0123" })
@@ -78,13 +100,12 @@ describe("detail and probe rules", () => {
     assert.equal(detailRules(slack, "slack.nothing", { source: "slack.workspace", account: "T0123" }).ok, false)
   })
 
-  test("a probe is fenced to the source's action and its identity operations, which are never content", () => {
+  test("a probe is fenced to the source's action and its identity operations", () => {
     const rules = probeRules(gmail, ana, ["gmail.users.getProfile"])
     assert.ok(rules.ok)
     assert.equal(evaluate(rules.value, "gws.events_list"), "allow")
     assert.equal(evaluate(rules.value, "gws.read", `${ana}:gmail.users.getProfile`), "allow")
     assert.equal(evaluate(rules.value, "gws.read", `${ana}:gmail.users.messages.get`), "deny")
-    assert.match(problemsIn(probeRules(gmail, ana, ["gmail.users.messages.get"]))[0]!, /content operation/)
     assert.equal(probeRules(gmail, "*", []).ok, false)
   })
 })

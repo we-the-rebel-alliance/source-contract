@@ -37,11 +37,14 @@ export const READ_VERBS: readonly string[] = ["get", "list", "read", "search", "
  * quote, and `npm run check:dist` reads that as an import statement.
  */
 const WRITE_VERB_WORDS = `delete remove send create update write insert patch put set add modify move trash archive revoke
-  grant share invite approve merge close reply forward upload publish unarchive unshare unsubscribe subscribe
-  watch untrash empty ban kick mute block follow pin unpin star unstar assign lock unlock overwrite truncate purge wipe
-  drop attach detach notify escalate resolve decline cancel submit vote snooze dismiss acknowledge ack enable disable
-  connect disconnect login logout signin signout mint verify hide unhide unpublish ingest index reindex sync import save
-  like unlike generate copy print convert schedule download`
+  grant share invite approve merge close reply forward upload publish unarchive unshare unsubscribe subscribe unwatch
+  watch untrash empty ban unban kick mute unmute block unblock follow unfollow pin unpin star unstar assign unassign
+  rename restore react like unlike retweet repost join leave transfer execute exec run invoke trigger dispatch start
+  stop cancel schedule submit accept decline reject mark lock unlock enable disable open push sync reset revert deploy
+  release sign pay charge refund purchase order book reserve purge wipe clear erase destroy drop truncate kill terminate
+  suspend resume rotate regenerate import save overwrite notify escalate resolve vote snooze dismiss acknowledge ack
+  connect disconnect login logout signin signout mint verify hide unhide ingest index reindex generate copy print
+  convert download`
 
 export const WRITE_VERBS: readonly string[] = WRITE_VERB_WORDS.split(/\s+/).filter((word) => word !== "")
 
@@ -102,10 +105,21 @@ export function nameProblem(name: unknown): string | undefined {
   if (joiner !== undefined) return joiner
   const write = tokens.find((token) => WRITE.has(token))
   if (write !== undefined) return `"${name}" carries the write verb ${write}: a read never sends, changes or watches`
-  const [first = "", second = ""] = tokens
-  if (READ.has(first)) return undefined
-  if (NOUN.has(first)) return `"${name}" leads with "${first}", which is a verb here and not a read verb`
-  if (NOUN.has(second)) return `"${name}" puts "${second}" where the verb sits, and it is not a read verb`
+  const verb = verbPosition(tokens)
+  if (verb === undefined) return undefined
+  if (NOUN.has(verb.token)) return `"${name}" puts "${verb.token}" where the verb sits, and it is not a read verb`
+  return undefined
+}
+
+/**
+ * Where a name's verb sits: the first token, or the token after a leading plain noun (a namespace such as `slack`).
+ * A noun-verb there with an object after it is a write; a single-token noun-verb is a noun (`export`).
+ */
+function verbPosition(tokens: readonly string[]): { readonly token: string; readonly index: number } | undefined {
+  const [first = ""] = tokens
+  if (READ.has(first) || WRITE.has(first) || NOUN.has(first)) return { token: first, index: 0 }
+  const second = tokens[1]
+  if (second !== undefined && (READ.has(second) || WRITE.has(second) || NOUN.has(second))) return { token: second, index: 1 }
   return undefined
 }
 
@@ -131,8 +145,13 @@ export function operationProblem(operation: unknown): string | undefined {
   const joiner = joinerProblem(operation, tokensOf(operation))
   if (joiner !== undefined) return joiner
   const segment = operation.includes(".") ? (operation.split(".").pop() ?? "") : operation
-  const write = tokensOf(segment).find((token) => WRITE.has(token))
+  const tokens = tokensOf(segment)
+  const write = tokens.find((token) => WRITE.has(token))
   if (write !== undefined) return `"${operation}" carries the write verb ${write} in "${segment}": a read never sends, changes or watches`
+  const verb = verbPosition(tokens)
+  if (verb !== undefined && NOUN.has(verb.token) && tokens.length > verb.index + 1) {
+    return `"${operation}" puts "${verb.token}" where the verb sits, with an object after it, so "${segment}" is a write`
+  }
   return undefined
 }
 

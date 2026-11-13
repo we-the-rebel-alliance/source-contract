@@ -279,7 +279,7 @@ describe("probe may assert only the identity operations", () => {
     reads: "message",
     tool: "events_list",
     accounts: { named: true },
-    permission: { events: "gws.events_list", operations: ["gmail.users.messages.list"] },
+    permission: { events: "gws.events_list", operations: ["gmail.users.getProfile", "gmail.users.messages.list"] },
     cost: { class: "free" },
   })
   const page = (): Record<string, unknown> => ({
@@ -333,7 +333,7 @@ describe("details must refuse an event outside the confirmed scope", () => {
     accounts: { named: false },
     scope: { keys: ["channels"], describe: "Channels" },
     details: [{ id: "slack.workspace.thread", tool: "slack_read_thread", from: ["thread"] }],
-    permission: { events: "slack_events_list", operations: ["slack_read_thread"] },
+    permission: { events: "slack_events_list", operations: ["slack_read_user_profile", "slack_read_channel", "slack_read_thread"] },
     cost: { class: "free" },
   })
   const page = (): Record<string, unknown> => ({
@@ -354,7 +354,7 @@ describe("details must refuse an event outside the confirmed scope", () => {
       plugin: PLUGIN,
       source: sourceOf(item()),
       tools: [{ id: "events_list", readOnly: true }, { id: "slack_read_thread", readOnly: true }],
-      identityOperations: ["slack_read_channel"],
+      identityOperations: ["slack_read_user_profile"],
       cases: [{ name: "a page", input: {} }],
       detailCases: [
         { id: "slack.workspace.thread", scope: { channels: ["C0PILOT001"] }, event: { thread: "slack-thread:C0PILOT001:1" } },
@@ -368,7 +368,7 @@ describe("details must refuse an event outside the confirmed scope", () => {
         },
         probe: async (_input, context) => {
           await context.permission.assert({ action: "slack_events_list" })
-          await context.permission.assert({ action: "slack_slack_read_channel" })
+          await context.permission.assert({ action: "slack_slack_read_user_profile" })
           return { account: ACCOUNT, owner: null }
         },
         details: {
@@ -396,7 +396,7 @@ describe("details must refuse an event outside the confirmed scope", () => {
       plugin: PLUGIN,
       source: sourceOf(item()),
       tools: [{ id: "events_list", readOnly: true }, { id: "slack_read_thread", readOnly: true }],
-      identityOperations: ["slack_read_channel"],
+      identityOperations: ["slack_read_user_profile"],
       cases: [{ name: "a page", input: {} }],
       detailCases: [{ id: "slack.workspace.thread", scope: { channels: ["C0PILOT001"] } }],
       calls: {
@@ -407,7 +407,7 @@ describe("details must refuse an event outside the confirmed scope", () => {
         },
         probe: async (_input, context) => {
           await context.permission.assert({ action: "slack_events_list" })
-          await context.permission.assert({ action: "slack_slack_read_channel" })
+          await context.permission.assert({ action: "slack_slack_read_user_profile" })
           return { account: ACCOUNT, owner: null }
         },
         details: { "slack.workspace.thread": async () => page() },
@@ -425,7 +425,7 @@ describe("the three mutations the reviewer killed", () => {
     reads: "message",
     tool: "events_list",
     accounts: { named: false },
-    permission: { events: "slack_events_list", operations: ["slack_read_channel"] },
+    permission: { events: "slack_events_list", operations: ["slack_read_user_profile", "slack_read_channel"] },
     cost: { class: "free" },
   })
   const page = (): Record<string, unknown> => ({
@@ -518,7 +518,7 @@ describe("the conformance-only rules", () => {
   const cases: readonly { readonly rule: string; readonly item: () => Record<string, unknown> }[] = [
     { rule: "a write verb in a name", item: () => base({ tool: "slack_send_message" }) },
     { rule: "a compound name", item: () => base({ tool: "slack_get_and_send" }) },
-    { rule: "an operation's verb is not a read verb", item: () => base({ permission: { events: "slack_events_list", operations: ["gmail.users.messages.insert"] } }) },
+    { rule: "an operation's last segment carries a write verb", item: () => base({ permission: { events: "slack_events_list", operations: ["gmail.users.messages.insert"] } }) },
     { rule: "an action outside the source's namespace", item: () => base({ permission: { events: "gws.events_list", operations: ["slack_read_channel"] } }) },
     { rule: "a urlHosts pattern too broad to mean anything", item: () => base({ urlHosts: ["*.co.uk"] }) },
     { rule: "a duplicate source id", item: () => base() },
@@ -548,7 +548,7 @@ describe("the running session's unused-grant check", () => {
     reads: "message",
     tool: "events_list",
     accounts: { named: true },
-    permission: { events: "gws.events_list", operations: ["gmail.users.messages.list"] },
+    permission: { events: "gws.events_list", operations: ["gmail.users.getProfile", "gmail.users.messages.list"] },
     cost: { class: "free" },
   })
   const page = (): Record<string, unknown> => ({
@@ -570,10 +570,9 @@ describe("the running session's unused-grant check", () => {
       identityOperations: ["gmail.users.getProfile"],
       cases: [{ name: "a page", input: {} }],
       calls: {
-        // It asserts the identity operation, never the content one: switching off the running check lets this pass.
+        // It asserts its own action, never the content operation: switching off the running check lets this pass.
         list: async (_input, context) => {
           await context.permission.assert({ action: "gws.events_list" })
-          await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.getProfile"] })
           return page()
         },
         probe: async (_input, context) => {
@@ -598,7 +597,7 @@ describe("identity operations", () => {
     reads: "message",
     tool: "events_list",
     accounts: { named: true },
-    permission: { events: "gws.events_list", operations: ["gmail.users.messages.list"] },
+    permission: { events: "gws.events_list", operations: ["gmail.users.getProfile", "gmail.users.messages.list"] },
     cost: { class: "free" },
     ...over,
   })
@@ -612,7 +611,7 @@ describe("identity operations", () => {
     refused: [],
     failed: [],
   })
-  const run = (identityOperations: string[]) =>
+  const run = (identityOperations: string[], pageAssertsIdentity = false) =>
     sourceConformance({
       plugin: "@joe-broadhead/opencode-gws",
       source: sourceOf(item()),
@@ -622,28 +621,65 @@ describe("identity operations", () => {
       calls: {
         list: async (_input, context) => {
           await context.permission.assert({ action: "gws.events_list" })
-          await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.messages.list"] })
+          if (!pageAssertsIdentity) await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.messages.list"] })
+          if (pageAssertsIdentity) await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.getProfile"] })
           return page()
         },
         probe: async (_input, context) => {
           await context.permission.assert({ action: "gws.events_list" })
           for (const operation of identityOperations) {
-            const action = operation.includes(".") ? "gws.read" : "gws_" + operation
-            await context.permission.assert({ action, resources: [operation.includes(".") ? `sam.rivera@example.com:${operation}` : "*"] })
+            await context.permission.assert({ action: "gws.read", resources: [`sam.rivera@example.com:${operation}`] })
           }
           return { account: "sam.rivera@example.com", owner: null }
         },
       },
     })
 
-  test("an identity operation that is also a content operation is refused", async () => {
-    const report = await run(["gmail.users.messages.list"])
-    assert.ok(report.problems.some((problem) => /messages\.list is an identity operation.*not content/.test(problem)), report.problems.join("; "))
+  test("an identity operation must also be declared as one of the source's operations", async () => {
+    const report = await run(["gmail.users.getProfile"])
+    assert.deepEqual(report.problems, [], report.problems.join("; "))
+    assert.deepEqual(report.identityOperations, ["gmail.users.getProfile"])
+    const undeclared = await run(["gmail.users.getDraft"])
+    assert.ok(undeclared.problems.some((problem) => /getDraft.*not among permission\.operations/.test(problem)), undeclared.problems.join("; "))
   })
 
-  test("the report names the identity operations it ran with", async () => {
-    const report = await run(["gmail.users.getProfile"])
-    assert.deepEqual(report.identityOperations, ["gmail.users.getProfile"])
+  test("a content run that asserts an identity operation is refused", async () => {
+    const report = await run(["gmail.users.getProfile"], true)
+    assert.ok(report.problems.some((problem) => /content read asserts gws\.read on .*gmail\.users\.getProfile/.test(problem)), report.problems.join("; "))
+  })
+
+  test("a detail read that asserts an identity operation is refused", async () => {
+    const withDetail = {
+      ...item(),
+      details: [{ id: "gws.gmail.message", tool: "gws_read", from: ["external_id"] }],
+    }
+    const report = await sourceConformance({
+      plugin: "@joe-broadhead/opencode-gws",
+      source: sourceOf(withDetail),
+      tools: [{ id: "events_list", readOnly: true }, { id: "gws_read", readOnly: true }],
+      identityOperations: ["gmail.users.getProfile"],
+      cases: [{ name: "a page", input: {} }],
+      detailCases: [{ id: "gws.gmail.message", scope: {}, event: { external_id: "18f0000000000001" } }],
+      calls: {
+        list: async (_input, context) => {
+          await context.permission.assert({ action: "gws.events_list" })
+          await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.messages.list"] })
+          return page()
+        },
+        probe: async (_input, context) => {
+          await context.permission.assert({ action: "gws.events_list" })
+          await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.getProfile"] })
+          return { account: "sam.rivera@example.com", owner: null }
+        },
+        details: {
+          "gws.gmail.message": async (_input, context) => {
+            await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.getProfile"] })
+            return page()
+          },
+        },
+      },
+    })
+    assert.ok(report.problems.some((problem) => /details.*identity operation/.test(problem)), report.problems.join("; "))
   })
 })
 
@@ -658,6 +694,40 @@ describe("the verb rule keeps Memory's promise", () => {
     for (const name of ["get_issue", "list_comments", "get_post", "read", "events_list", "calendar_today", "slack_read_channel", "list_deleted_items"]) {
       assert.equal(nameProblem(name), undefined, name)
     }
+  })
+
+  test("the write list covers the words a plugin actually uses", () => {
+    for (const name of [
+      "chat_postMessage",
+      "slack_post_message",
+      "post_message",
+      "postMessage",
+      "execute_sql",
+      "run_script",
+      "trigger_deploy",
+      "start_job",
+      "stop_job",
+      "sign_document",
+      "pay_invoice",
+      "assign_reviewer",
+      "rename_file",
+      "restore_backup",
+      "react_message",
+      "retweet_post",
+    ]) {
+      assert.ok(nameProblem(name) !== undefined, name)
+    }
+    for (const operation of ["chat.postMessage", "conversations.join", "repos.transfer", "slack_post_message", "execute_sql", "run_script", "chat.postMessage"]) {
+      assert.ok(operationProblem(operation) !== undefined, operation)
+    }
+  })
+
+  test("a single-token noun-verb last segment is a read, and a noun with an object is not", () => {
+    assert.equal(operationProblem("drive.files.export"), undefined)
+    assert.equal(operationProblem("calendar.events.instances"), undefined)
+    assert.equal(operationProblem("x.users.mentions"), undefined)
+    assert.ok(operationProblem("chat.postMessage") !== undefined)
+    assert.ok(operationProblem("files.exportAll") !== undefined)
   })
 
   test("an operation keeps its last segment free of a write verb, and may lead with a noun", () => {
@@ -679,7 +749,7 @@ describe("an out-of-scope detail read refuses with a defined code", () => {
     accounts: { named: false },
     scope: { keys: ["channels"], describe: "Channels" },
     details: [{ id: "slack.workspace.thread", tool: "slack_read_thread", from: ["thread"] }],
-    permission: { events: "slack_events_list", operations: ["slack_read_thread"] },
+    permission: { events: "slack_events_list", operations: ["slack_read_user_profile", "slack_read_channel", "slack_read_thread"] },
     cost: { class: "free" },
   })
   const page = (): Record<string, unknown> => ({
@@ -692,12 +762,12 @@ describe("an out-of-scope detail read refuses with a defined code", () => {
     refused: [],
     failed: [],
   })
-  const run = (code: string) =>
+  const run = (code: string, message = `${code}: that thread is in a channel nobody confirmed. Next step: confirm the channel it belongs to.`) =>
     sourceConformance({
       plugin: PLUGIN,
       source: sourceOf(item()),
       tools: [{ id: "events_list", readOnly: true }, { id: "slack_read_thread", readOnly: true }],
-      identityOperations: ["slack_read_channel"],
+      identityOperations: ["slack_read_user_profile"],
       cases: [{ name: "a page", input: {} }],
       detailCases: [
         { id: "slack.workspace.thread", scope: { channels: ["C0PILOT001"] }, event: { thread: "slack-thread:C0PILOT001:1" } },
@@ -711,14 +781,12 @@ describe("an out-of-scope detail read refuses with a defined code", () => {
         },
         probe: async (_input, context) => {
           await context.permission.assert({ action: "slack_events_list" })
-          await context.permission.assert({ action: "slack_slack_read_channel" })
+          await context.permission.assert({ action: "slack_slack_read_user_profile" })
           return { account: ACCOUNT, owner: null }
         },
         details: {
           "slack.workspace.thread": async (input, context) => {
-            if (input.fields["thread"] === "slack-thread:C0PILOT003:1") {
-              throw new Error(`${code}: that thread is in a channel nobody confirmed. Next step: confirm the channel it belongs to.`)
-            }
+            if (input.fields["thread"] === "slack-thread:C0PILOT003:1") throw new Error(message)
             await context.permission.assert({ action: "slack_slack_read_thread" })
             return page()
           },
@@ -734,6 +802,42 @@ describe("an out-of-scope detail read refuses with a defined code", () => {
       assert.ok(bad.problems.some((problem) => /PERMISSION_DENIED/.test(problem)), `${code}: ${bad.problems.join("; ")}`)
     }
   })
+
+  test("the code without the family's next step is refused", async () => {
+    const bad = await run("PERMISSION_DENIED", "PERMISSION_DENIED: that thread is in a channel nobody confirmed.")
+    assert.ok(bad.problems.some((problem) => /not PERMISSION_DENIED: … Next step: …/.test(problem)), bad.problems.join("; "))
+    const answered = await sourceConformance({
+      plugin: PLUGIN,
+      source: sourceOf(item()),
+      tools: [{ id: "events_list", readOnly: true }, { id: "slack_read_thread", readOnly: true }],
+      identityOperations: ["slack_read_user_profile"],
+      cases: [{ name: "a page", input: {} }],
+      detailCases: [
+        { id: "slack.workspace.thread", scope: { channels: ["C0PILOT001"] }, event: { thread: "slack-thread:C0PILOT001:1" } },
+        { id: "slack.workspace.thread", scope: { channels: ["C0PILOT001"] }, event: { thread: "slack-thread:C0PILOT003:1" }, expect: { refuses: "PERMISSION_DENIED" } },
+      ],
+      calls: {
+        list: async (_input, context) => {
+          await context.permission.assert({ action: "slack_events_list" })
+          await context.permission.assert({ action: "slack_slack_read_channel" })
+          return page()
+        },
+        probe: async (_input, context) => {
+          await context.permission.assert({ action: "slack_events_list" })
+          await context.permission.assert({ action: "slack_slack_read_user_profile" })
+          return { account: ACCOUNT, owner: null }
+        },
+        details: {
+          "slack.workspace.thread": async (input, context) => {
+            if (input.fields["thread"] === "slack-thread:C0PILOT003:1") return page()
+            await context.permission.assert({ action: "slack_slack_read_thread" })
+            return page()
+          },
+        },
+      },
+    })
+    assert.ok(answered.problems.some((problem) => /answered a call outside the confirmed scope/.test(problem)), answered.problems.join("; "))
+  })
 })
 
 describe("the page fields that are absent, and the limits §2.2 does not state", () => {
@@ -743,7 +847,7 @@ describe("the page fields that are absent, and the limits §2.2 does not state",
     reads: "message",
     tool: "events_list",
     accounts: { named: false },
-    permission: { events: "slack_events_list", operations: ["slack_read_channel"] },
+    permission: { events: "slack_events_list", operations: ["slack_read_user_profile", "slack_read_channel"] },
     cost: { class: "free" },
   })
   const options = () => ({ source: sourceOf(item()), plugin: PLUGIN, input: {} })

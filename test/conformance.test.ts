@@ -35,7 +35,7 @@ const slackItem = (over: Record<string, unknown> = {}): Record<string, unknown> 
   details: [{ id: "slack.workspace.thread", tool: "slack_read_thread", from: ["thread"] }],
   permission: {
     events: "slack_events_list",
-    operations: ["slack_read_channel", "slack_read_thread"],
+    operations: ["slack_read_user_profile", "slack_read_channel", "slack_read_thread"],
   },
   cost: { class: "free" },
   private: true,
@@ -295,7 +295,7 @@ describe("sourceConformance", () => {
     assert.equal(report.incomplete, false)
     assert.deepEqual(
       report.checks.map((check) => check.name),
-      ["declaration", "page-result", "failed-holds-cursor", "gap-and-cursor-expired", "refused-is-final", "billed-cost", "identity-grants", "probe", "details", "suggest", "unused-grants"],
+      ["declaration", "page-result", "failed-holds-cursor", "gap-and-cursor-expired", "refused-is-final", "billed-cost", "probe", "details", "suggest", "identity-grants", "unused-grants"],
     )
     assert.deepEqual(
       report.checks.filter((check) => !check.ran).map((check) => check.name),

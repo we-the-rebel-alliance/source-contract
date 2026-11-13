@@ -1,7 +1,7 @@
 [
   "a write verb in a name",
   "a compound name",
-  "an operation's verb is not a read verb",
+  "an operation's last segment carries a write verb",
   "an action outside the source's namespace",
   "a urlHosts pattern too broad to mean anything",
   "a duplicate source id",

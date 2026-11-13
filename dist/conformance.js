@@ -10429,11 +10429,14 @@ var PUBLIC_SUFFIX_RULES = RULES.split("\n");
 // src/internal/conformance/rules.ts
 var READ_VERBS = ["get", "list", "read", "search", "query", "fetch", "count", "describe", "probe", "status", "lookup", "view", "history", "find"];
 var WRITE_VERB_WORDS = `delete remove send create update write insert patch put set add modify move trash archive revoke
-  grant share invite approve merge close reply forward upload publish unarchive unshare unsubscribe subscribe
-  watch untrash empty ban kick mute block follow pin unpin star unstar assign lock unlock overwrite truncate purge wipe
-  drop attach detach notify escalate resolve decline cancel submit vote snooze dismiss acknowledge ack enable disable
-  connect disconnect login logout signin signout mint verify hide unhide unpublish ingest index reindex sync import save
-  like unlike generate copy print convert schedule download`;
+  grant share invite approve merge close reply forward upload publish unarchive unshare unsubscribe subscribe unwatch
+  watch untrash empty ban unban kick mute unmute block unblock follow unfollow pin unpin star unstar assign unassign
+  rename restore react like unlike retweet repost join leave transfer execute exec run invoke trigger dispatch start
+  stop cancel schedule submit accept decline reject mark lock unlock enable disable open push sync reset revert deploy
+  release sign pay charge refund purchase order book reserve purge wipe clear erase destroy drop truncate kill terminate
+  suspend resume rotate regenerate import save overwrite notify escalate resolve vote snooze dismiss acknowledge ack
+  connect disconnect login logout signin signout mint verify hide unhide ingest index reindex generate copy print
+  convert download`;
 var WRITE_VERBS = WRITE_VERB_WORDS.split(/\s+/).filter((word) => word !== "");
 var NOUN_VERBS = ["issue", "post", "comment", "draft", "label", "message", "export", "mention", "note", "file", "bookmark"];
 var JOINERS = ["and", "then", "or"];
@@ -10460,10 +10463,16 @@ function nameProblem(name) {
   if (joiner !== void 0) return joiner;
   const write = tokens.find((token) => WRITE.has(token));
   if (write !== void 0) return `"${name}" carries the write verb ${write}: a read never sends, changes or watches`;
-  const [first = "", second = ""] = tokens;
-  if (READ.has(first)) return void 0;
-  if (NOUN.has(first)) return `"${name}" leads with "${first}", which is a verb here and not a read verb`;
-  if (NOUN.has(second)) return `"${name}" puts "${second}" where the verb sits, and it is not a read verb`;
+  const verb = verbPosition(tokens);
+  if (verb === void 0) return void 0;
+  if (NOUN.has(verb.token)) return `"${name}" puts "${verb.token}" where the verb sits, and it is not a read verb`;
+  return void 0;
+}
+function verbPosition(tokens) {
+  const [first = ""] = tokens;
+  if (READ.has(first) || WRITE.has(first) || NOUN.has(first)) return { token: first, index: 0 };
+  const second = tokens[1];
+  if (second !== void 0 && (READ.has(second) || WRITE.has(second) || NOUN.has(second))) return { token: second, index: 1 };
   return void 0;
 }
 function readVerbProblem(name) {
@@ -10477,8 +10486,13 @@ function operationProblem(operation) {
   const joiner = joinerProblem(operation, tokensOf(operation));
   if (joiner !== void 0) return joiner;
   const segment = operation.includes(".") ? operation.split(".").pop() ?? "" : operation;
-  const write = tokensOf(segment).find((token) => WRITE.has(token));
+  const tokens = tokensOf(segment);
+  const write = tokens.find((token) => WRITE.has(token));
   if (write !== void 0) return `"${operation}" carries the write verb ${write} in "${segment}": a read never sends, changes or watches`;
+  const verb = verbPosition(tokens);
+  if (verb !== void 0 && NOUN.has(verb.token) && tokens.length > verb.index + 1) {
+    return `"${operation}" puts "${verb.token}" where the verb sits, with an object after it, so "${segment}" is a write`;
+  }
   return void 0;
 }
 var EVENT_FIELDS = ["external_id", "kind", "occurred_at", "title", "text", "url", "thread", "actors", "labels", "hash"];
@@ -10983,8 +10997,10 @@ async function sourceConformance(options) {
   const cases = options.cases ?? [];
   const account = options.account ?? "conformance";
   const identityOperations = options.identityOperations ?? [];
-  const runningGrants = [...options.grants ?? grantsFor(source), ...identityGrantsFor(source, identityOperations)];
+  const runningGrants = options.grants ?? grantsFor(source);
   const running = recordingPermission(runningGrants);
+  const identityGrants = identityGrantsFor(source, identityOperations);
+  const identity = [];
   const bind = recordingPermission(bindGrantsFor(source));
   const context = { account, permission: running.permission };
   const bindContext = { account, permission: bind.permission };
@@ -11006,6 +11022,7 @@ async function sourceConformance(options) {
   for (const item of cases) {
     const where = `events_list(${item.name})`;
     const expect = item.expect ?? "page";
+    const assertedBeforePage = running.assertions.length;
     let answer;
     try {
       answer = await calls.list?.(item.input, context);
@@ -11038,6 +11055,7 @@ async function sourceConformance(options) {
     gap.push(...result.gap);
     refused.push(...result.refused);
     cost.push(...result.cost);
+    identity.push(...identityOverlap(running.assertions.slice(assertedBeforePage), identityGrants, where));
     sawFailed ||= hasEntries(answer, "failed");
     sawRefused ||= hasEntries(answer, "refused");
     if (expect === "empty" && plain5(answer) && Array.isArray(answer["events"]) && answer["events"].length > 0) {
@@ -11049,13 +11067,11 @@ async function sourceConformance(options) {
   add("gap-and-cursor-expired", gap, isEvents && sawGap, !isEvents);
   add("refused-is-final", refused, isEvents && sawRefused, !isEvents);
   add("billed-cost", cost, source.cost.class === "billed" && isEvents, source.cost.class !== "billed");
-  const identity = [];
   for (const operation of identityOperations) {
-    if (source.permission.operations.includes(operation)) {
-      identity.push(`${operation} is an identity operation and permission.operations also lists it: an identity read is not content, and the declaration must not call it both`);
+    if (!source.permission.operations.includes(operation)) {
+      identity.push(`${operation} is declared an identity operation and is not among permission.operations: a source's operations are everything its reads assert, identity included`);
     }
   }
-  add("identity-grants", identity);
   const probe = [];
   const assertedBeforeProbe = running.assertions.length;
   try {
@@ -11118,8 +11134,10 @@ async function sourceConformance(options) {
     if (calls.snapshot === void 0) snapshot.push("the source is a snapshot and the kit has no snapshot call, so its grants cannot be checked");
     else {
       for (const input of snapshotCases) {
+        const assertedBeforeSnapshot = running.assertions.length;
         try {
           await calls.snapshot(input, context);
+          identity.push(...identityOverlap(running.assertions.slice(assertedBeforeSnapshot), identityGrants, `snapshot_read(${JSON.stringify(input)})`));
         } catch (error) {
           snapshot.push(`snapshot_read(${JSON.stringify(input)}) failed: ${messageOf(error)}`);
         }
@@ -11127,6 +11145,7 @@ async function sourceConformance(options) {
       if (snapshotCases.length === 0) snapshot.push("the source is a snapshot and no snapshot case ran");
     }
   }
+  add("identity-grants", identity);
   const unused = unusedGrants(runningGrants, running.assertions).map(
     (grant) => `the declaration grants ${grant.action} on ${grant.resource}, which no read asserts: a source's grants are exactly what it asserts`
   );
@@ -11189,15 +11208,7 @@ async function assertDetail(entry, detail, source, read, context, running, runni
     problems.push(`${where} failed inside the confirmed scope: ${messageOf(error)}`);
   }
   problems.push(...outsideGrants(running.assertions.slice(assertedBefore), runningGrants, where));
-  const identity = identityGrantsFor(source, identityOperations);
-  for (const assertion of running.assertions.slice(assertedBefore)) {
-    const resources = assertion.resources.length > 0 ? assertion.resources : ["*"];
-    for (const resource of resources) {
-      if (identity.some((grant) => assertionMatches([{ action: assertion.action, resources: [resource] }], grant))) {
-        problems.push(`${where} asserts an identity operation: an identity read is not a content read, and a detail read must not reach one`);
-      }
-    }
-  }
+  problems.push(...identityOverlap(running.assertions.slice(assertedBefore), identityGrantsFor(source, identityOperations), where));
 }
 function messageOf(error) {
   if (error instanceof Error) return error.message;
@@ -11246,6 +11257,18 @@ function outsideGrants(assertions, grants, where) {
     for (const resource of resources) {
       const held = grants.some((grant) => assertionMatches([{ action: assertion.action, resources: [resource] }], grant));
       if (!held) problems.push(`${where} asserts ${assertion.action} on ${resource}, which the source does not grant: a read asserts only its own grant`);
+    }
+  }
+  return problems;
+}
+function identityOverlap(assertions, identityGrants, where) {
+  const problems = [];
+  for (const assertion of assertions) {
+    const resources = assertion.resources.length > 0 ? assertion.resources : ["*"];
+    for (const resource of resources) {
+      if (identityGrants.some((grant) => assertionMatches([{ action: assertion.action, resources: [resource] }], grant))) {
+        problems.push(`${where}: a content read asserts ${assertion.action} on ${resource}, which is an identity operation: identity reads belong to probe`);
+      }
     }
   }
   return problems;

@@ -154,9 +154,13 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   const { plugin, source, tools, calls } = options
   const cases = options.cases ?? []
   const account = options.account ?? "conformance"
+  // Declared must equal asserted overall: an identity operation is one of the source's operations, so the running
+  // session already holds it, and no content read may assert it.
   const identityOperations = options.identityOperations ?? []
-  const runningGrants = [...(options.grants ?? grantsFor(source)), ...identityGrantsFor(source, identityOperations)]
+  const runningGrants = options.grants ?? grantsFor(source)
   const running = recordingPermission(runningGrants)
+  const identityGrants = identityGrantsFor(source, identityOperations)
+  const identity: string[] = []
   const bind = recordingPermission(bindGrantsFor(source))
   const context: SessionContext = { account, permission: running.permission }
   const bindContext: SessionContext = { account, permission: bind.permission }
@@ -182,6 +186,7 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   for (const item of cases) {
     const where = `events_list(${item.name})`
     const expect = item.expect ?? "page"
+    const assertedBeforePage = running.assertions.length
     let answer: unknown
     try {
       answer = await calls.list?.(item.input, context)
@@ -214,6 +219,7 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
     gap.push(...result.gap)
     refused.push(...result.refused)
     cost.push(...result.cost)
+    identity.push(...identityOverlap(running.assertions.slice(assertedBeforePage), identityGrants, where))
     sawFailed ||= hasEntries(answer, "failed")
     sawRefused ||= hasEntries(answer, "refused")
     if (expect === "empty" && plain(answer) && Array.isArray(answer["events"]) && (answer["events"] as unknown[]).length > 0) {
@@ -226,14 +232,11 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   add("refused-is-final", refused, isEvents && sawRefused, !isEvents)
   add("billed-cost", cost, source.cost.class === "billed" && isEvents, source.cost.class !== "billed")
 
-  const identity: string[] = []
   for (const operation of identityOperations) {
-    if (source.permission.operations.includes(operation)) {
-      identity.push(`${operation} is an identity operation and permission.operations also lists it: an identity read is not content, and the declaration must not call it both`)
+    if (!source.permission.operations.includes(operation)) {
+      identity.push(`${operation} is declared an identity operation and is not among permission.operations: a source's operations are everything its reads assert, identity included`)
     }
   }
-  add("identity-grants", identity)
-
   const probe: string[] = []
   const assertedBeforeProbe = running.assertions.length
   try {
@@ -299,8 +302,10 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
     if (calls.snapshot === undefined) snapshot.push("the source is a snapshot and the kit has no snapshot call, so its grants cannot be checked")
     else {
       for (const input of snapshotCases) {
+        const assertedBeforeSnapshot = running.assertions.length
         try {
           await calls.snapshot(input, context)
+          identity.push(...identityOverlap(running.assertions.slice(assertedBeforeSnapshot), identityGrants, `snapshot_read(${JSON.stringify(input)})`))
         } catch (error) {
           snapshot.push(`snapshot_read(${JSON.stringify(input)}) failed: ${messageOf(error)}`)
         }
@@ -308,6 +313,8 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
       if (snapshotCases.length === 0) snapshot.push("the source is a snapshot and no snapshot case ran")
     }
   }
+
+  add("identity-grants", identity)
 
   const unused = unusedGrants(runningGrants, running.assertions).map(
     (grant) => `the declaration grants ${grant.action} on ${grant.resource}, which no read asserts: a source's grants are exactly what it asserts`,
@@ -392,15 +399,7 @@ async function assertDetail(
     problems.push(`${where} failed inside the confirmed scope: ${messageOf(error)}`)
   }
   problems.push(...outsideGrants(running.assertions.slice(assertedBefore), runningGrants, where))
-  const identity = identityGrantsFor(source, identityOperations)
-  for (const assertion of running.assertions.slice(assertedBefore)) {
-    const resources = assertion.resources.length > 0 ? assertion.resources : ["*"]
-    for (const resource of resources) {
-      if (identity.some((grant) => assertionMatches([{ action: assertion.action, resources: [resource] }], grant))) {
-        problems.push(`${where} asserts an identity operation: an identity read is not a content read, and a detail read must not reach one`)
-      }
-    }
-  }
+  problems.push(...identityOverlap(running.assertions.slice(assertedBefore), identityGrantsFor(source, identityOperations), where))
 }
 
 /** The word or code an error carries, for a refusal case. */
@@ -466,6 +465,20 @@ function outsideGrants(assertions: readonly Assertion[], grants: readonly Grant[
     for (const resource of resources) {
       const held = grants.some((grant) => assertionMatches([{ action: assertion.action, resources: [resource] }], grant))
       if (!held) problems.push(`${where} asserts ${assertion.action} on ${resource}, which the source does not grant: a read asserts only its own grant`)
+    }
+  }
+  return problems
+}
+
+/** A content read may not assert an identity operation: those belong to the probe. */
+function identityOverlap(assertions: readonly Assertion[], identityGrants: readonly Grant[], where: string): string[] {
+  const problems: string[] = []
+  for (const assertion of assertions) {
+    const resources = assertion.resources.length > 0 ? assertion.resources : ["*"]
+    for (const resource of resources) {
+      if (identityGrants.some((grant) => assertionMatches([{ action: assertion.action, resources: [resource] }], grant))) {
+        problems.push(`${where}: a content read asserts ${assertion.action} on ${resource}, which is an identity operation: identity reads belong to probe`)
+      }
     }
   }
   return problems

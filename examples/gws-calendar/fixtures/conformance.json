@@ -29,10 +29,6 @@
             },
             {
               "action": "gws.read",
-              "resource": "sam.rivera@example.com:calendar.calendarList.get"
-            },
-            {
-              "action": "gws.read",
               "resource": "sam.rivera@example.com:calendar.events.list"
             }
           ],
@@ -374,7 +370,8 @@
           "expect": {
             "refuses": "SCOPE_UNKNOWN"
           },
-          "refuses": "SCOPE_UNKNOWN: this source reads calendars, not labels. Next step: confirm the calendars to read."
+          "refuses": "SCOPE_UNKNOWN: this source reads calendars, not labels. Next step: confirm the calendars to read.",
+          "asserts": []
         }
       ],
       "probe": {
@@ -446,10 +443,6 @@
           {
             "action": "gws.calendar_today",
             "resource": "*"
-          },
-          {
-            "action": "gws.read",
-            "resource": "sam.rivera@example.com:calendar.calendars.get"
           },
           {
             "action": "gws.read",

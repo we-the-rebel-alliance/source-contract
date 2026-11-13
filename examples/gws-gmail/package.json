@@ -30,6 +30,7 @@
         "permission": {
           "events": "gws.events_list",
           "operations": [
+            "gmail.users.getProfile",
             "gmail.users.history.list",
             "gmail.users.messages.list",
             "gmail.users.messages.get"

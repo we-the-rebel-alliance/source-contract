@@ -30,10 +30,6 @@
             },
             {
               "action": "gws.read",
-              "resource": "sam.rivera@example.com:gmail.users.getProfile"
-            },
-            {
-              "action": "gws.read",
               "resource": "sam.rivera@example.com:gmail.users.history.list"
             },
             {
@@ -160,7 +156,8 @@
           "expect": {
             "refuses": "CURSOR_INVALID"
           },
-          "refuses": "CURSOR_INVALID: this cursor was not issued by gws for this account. Next step: read again without a cursor to restart the window."
+          "refuses": "CURSOR_INVALID: this cursor was not issued by gws for this account. Next step: read again without a cursor to restart the window.",
+          "asserts": []
         },
         {
           "name": "one message that could not be read holds the cursor back",
@@ -295,7 +292,8 @@
           },
           "expect": "expired",
           "refuses": "CURSOR_EXPIRED: Gmail no longer keeps the history this cursor names. Next step: read again with since to restart the window.",
-          "since": "2026-10-13T09:00:00.000Z"
+          "since": "2026-10-13T09:00:00.000Z",
+          "asserts": []
         },
         {
           "name": "the restarted window reads on",

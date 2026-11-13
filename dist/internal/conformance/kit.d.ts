@@ -79,8 +79,19 @@ export interface SourceConformanceOptions {
     readonly identityOperations?: readonly string[] | undefined;
     /** The account the kit hands a read; a display value, never a grant. */
     readonly account?: string | undefined;
-    /** The grants to run under. Default: the kit's provisional derivation from the declaration. */
+    /** The grants to run under. Default: the app's `permission.sessionRules`, so there is one derivation. */
     readonly grants?: readonly Grant[] | undefined;
+    /** The declaration's plugin-level keys: `sources.rpc` and `sources.probe.action` (#4, #8). */
+    readonly sources?: {
+        readonly rpc?: string | undefined;
+        readonly probe?: {
+            readonly action: string;
+        } | undefined;
+    } | undefined;
+    /** The plugin's `describe` answer, for the tools-RPC id diagnostic. */
+    readonly describe?: {
+        readonly id?: unknown;
+    } | undefined;
     /**
      * Set when a page is fetched atomically: one provider call answers the whole page, so no single item can fail on its
      * own and `failed[]` can never be produced (Calendar's `events.list` is one). The `failed-holds-cursor` check is then
@@ -106,6 +117,8 @@ export interface ConformanceReport {
     readonly plugin: string;
     /** The identity operations the kit was told a probe may assert, so a reader sees them. */
     readonly identityOperations: readonly string[];
+    /** The plugin's probe action, when the declaration names one. */
+    readonly probeAction?: string | undefined;
     readonly checks: readonly ConformanceCheck[];
     readonly problems: readonly string[];
     readonly ok: boolean;

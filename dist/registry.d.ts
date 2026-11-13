@@ -129,5 +129,13 @@ export declare const OUTPUT_NAMES: OutputName[];
 export declare function isOutputName(name: unknown): name is OutputName;
 /** The validator of a registered output, or undefined for a name the registry does not hold. */
 export declare function outputValidator(name: string): Validator<unknown> | undefined;
-/** `data` checked against the named output; a name the registry does not hold is a problem, not a throw. */
-export declare function checkOutput(name: string, data: unknown): Checked<unknown>;
+/** An extension name: `x-<namespace>/<name>`. Its schema travels with the source, inline. */
+export declare const EXTENSION_OUTPUT: RegExp;
+/** True when `name` is an extension output, which the registry does not hold. */
+export declare function isExtensionOutput(name: unknown): name is string;
+/**
+ * `data` checked against the named output; a name the registry does not hold is a problem, not a throw.
+ *
+ * An `x-` output has no registry schema: `schema` is the source's inline `outputSchema`, and it is what validates.
+ */
+export declare function checkOutput(name: string, data: unknown, schema?: Readonly<Record<string, unknown>> | boolean): Checked<unknown>;

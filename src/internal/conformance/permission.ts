@@ -3,6 +3,7 @@
  * with this context, so a read that asserts more than its declaration holds is refused here, and a grant nothing
  * asserts is reported at the end. Declared equals asserted.
  */
+import { sessionRules } from "../../permission.ts"
 import type { SourceItem } from "../schema/types.ts"
 
 /** A permission action and its resource, as a declaration derives them. */
@@ -49,11 +50,20 @@ const key = (action: string, resource: string): string => `${action}\u0000${reso
  *
  * Not exported from the package: it is the kit's own reading, not a contract.
  */
-export function grantsFor(source: SourceItem): Grant[] {
-  const action = source.kind === "events" ? source.permission.events : source.permission.tool
-  const grants: Grant[] = [{ action, resource: "*" }]
-  for (const operation of source.permission.operations) addGrant(grants, source, operation)
-  return grants
+export function grantsFor(source: SourceItem, account: string): Grant[] {
+  // One derivation, not two: the app's `permission.sessionRules` builds the fence, and this reads the allows from it.
+  // A source that states its grants verbatim (GitHub's `github_api` on `GET /user`) needs no derivation.
+  if (source.permission.rules !== undefined) {
+    const action = source.kind === "events" ? source.permission.events : source.permission.tool
+    return [{ action, resource: "*" }, ...source.permission.rules.map((rule) => ({ action: rule.action, resource: rule.resource }))]
+  }
+  // The app's frame type and this module's parsed type describe one declaration; only optionality differs.
+  const rules = sessionRules(source as unknown as Parameters<typeof sessionRules>[0], { source: source.id, account })
+  if (!rules.ok) return []
+  // The account is the binding's, not the descriptor's: a declared operation matches any account, as it did before.
+  return rules.value
+    .filter((rule) => rule.effect === "allow")
+    .map((rule) => ({ action: rule.action, resource: rule.resource.replace(`${account}:`, "{account}:") }))
 }
 
 /**

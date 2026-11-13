@@ -1,8 +1,3 @@
-/**
- * The recording permission context: a session whose rules are exactly a source's grants. Every read the kit calls runs
- * with this context, so a read that asserts more than its declaration holds is refused here, and a grant nothing
- * asserts is reported at the end. Declared equals asserted.
- */
 import type { SourceItem } from "../schema/types.js";
 /** A permission action and its resource, as a declaration derives them. */
 export interface Grant {
@@ -45,7 +40,7 @@ export interface RecordingPermission {
  *
  * Not exported from the package: it is the kit's own reading, not a contract.
  */
-export declare function grantsFor(source: SourceItem): Grant[];
+export declare function grantsFor(source: SourceItem, account: string): Grant[];
 /**
  * The grants of the **bind** session: only `scope.suggest`'s tool and operations. They never enter a running grant, so
  * they are a separate session with its own unused check.

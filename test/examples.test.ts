@@ -14,17 +14,17 @@ describe("the examples", () => {
     const examples = loadExamples(root)
     assert.deepEqual(
       examples.map((example) => example.name),
-      ["gws-calendar", "gws-gmail", "slack"],
+      ["github", "gws-calendar", "gws-gmail", "slack"],
     )
     for (const example of examples) assert.ok(example.fixture !== undefined, `${example.name} records no fixture`)
   })
 
   test("the schema and the kit accept every example, and every declared source is exercised", async () => {
     const results = await runExamples({ root, schema, conformance, events })
-    assert.equal(results.length, 3)
+    assert.equal(results.length, 4)
     for (const result of results) assert.deepEqual(result.problems, [], result.name)
     const sources = results.flatMap((result) => result.reports.map((report) => report.source))
-    assert.deepEqual(sources.sort(), ["gws.calendar", "gws.calendar.today", "gws.gmail", "slack.workspace"])
+    assert.deepEqual(sources.sort(), ["github.activity", "gws.calendar", "gws.calendar.today", "gws.gmail", "slack.workspace"])
   })
 
   test("every check Memory adds runs on at least one example", async () => {

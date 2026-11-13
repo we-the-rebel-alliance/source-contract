@@ -8,6 +8,12 @@ export declare const MAX_BYTES_LIMIT = 1048576;
 /** The value of a plugin's top-level `sources` key: the contract version and its sources. */
 export interface Sources {
     readonly contractVersion: 1;
+    /** The plugin's tools-RPC id (#4, #8): the plugin id and `.tools`. */
+    readonly rpc?: string | undefined;
+    /** The plugin's one probe tool, and the permission action it asserts (#4, #8). */
+    readonly probe?: {
+        readonly action: string;
+    } | undefined;
     readonly items: readonly SourceItem[];
 }
 /** An events feed or a snapshot. */
@@ -40,7 +46,7 @@ export interface SourceCommon {
 /** An events source: append-only items read with a cursor. */
 export interface SourceEvents extends SourceCommon {
     readonly kind: "events";
-    /** The thing it reads, such as `message`. */
+    /** The thing it reads: a core kind such as `message`, or `x-<namespace>/<name>`. */
     readonly reads: string;
     /** Reads of one event's detail, called only with the event fields they name. */
     readonly details?: readonly Detail[] | undefined;
@@ -56,8 +62,10 @@ export interface SourceEvents extends SourceCommon {
 /** A snapshot source: the latest state, read on demand. */
 export interface SourceSnapshot extends SourceCommon {
     readonly kind: "snapshot";
-    /** The name of its schema in the output registry. The registry is the app's; this is a name only. */
+    /** A registry name such as `agenda`, or `x-<namespace>/<name>`. The registry is the app's; this is a name only. */
     readonly output: string;
+    /** An `x-` output's schema, inline: JSON Schema draft 2020-12. Required for `x-`, absent for a registry name. */
+    readonly outputSchema?: Readonly<Record<string, unknown>> | boolean | undefined;
     /** The parameters a consumer may pass, resolved by the library at read time. */
     readonly params?: Readonly<Record<string, unknown>> | undefined;
     /** The action its read tool asserts. */
@@ -106,19 +114,32 @@ export interface Detail {
 export type DetailField = "external_id" | "kind" | "occurred_at" | "url" | "thread" | "actors" | "labels" | "hash";
 /** The actions and operations a source's reads assert. */
 export type Permission = PermissionEvents | PermissionTool;
+/** One declared grant: the action a read asserts, and the resource it asserts it on. */
+export interface PermissionRuleLike {
+    readonly action: string;
+    readonly resource: string;
+}
 /** An events source's permission: the `events_list` action, and the provider operations it asserts. */
 export interface PermissionEvents {
     /** The action `events_list` asserts, in the plugin's namespace. */
     readonly events: string;
-    /** Every provider operation the source's reads assert, and nothing else. */
-    readonly operations: readonly string[];
+    /** Every provider operation the source's reads assert, and nothing else. Absent when `rules` states them. */
+    readonly operations?: readonly string[] | undefined;
+    /** The grants verbatim, for a provider whose resources are not `<account>:<operation>` such as GitHub's `github_api` on `GET /user`. */
+    readonly rules?: readonly PermissionRuleLike[] | undefined;
+    /** The identity operations `probe` asserts for this source (#4, #8). None may be a content operation. */
+    readonly identity?: readonly string[] | undefined;
 }
 /** A snapshot's permission: the read tool's action, and the provider operations it asserts. */
 export interface PermissionTool {
     /** The action the read tool asserts, in the plugin's namespace. */
     readonly tool: string;
-    /** Every provider operation the source's reads assert, and nothing else. */
-    readonly operations: readonly string[];
+    /** Every provider operation the source's reads assert, and nothing else. Absent when `rules` states them. */
+    readonly operations?: readonly string[] | undefined;
+    /** The grants verbatim, when the provider's resources are not `<account>:<operation>`. */
+    readonly rules?: readonly PermissionRuleLike[] | undefined;
+    /** The identity operations `probe` asserts for this source (#4, #8). None may be a content operation. */
+    readonly identity?: readonly string[] | undefined;
 }
 /** What one read costs: `free` charges nothing, `metered` charges per unit, `billed` charges per call. */
 export type Cost = CostFree | CostMetered | CostBilled;

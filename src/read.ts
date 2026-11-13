@@ -122,7 +122,7 @@ export function checkReadRequest(request: ReadRequest): { readonly source: Sourc
       return refused("SCHEMA_VIOLATION", "cursor, since and limit are for an events source", "Pass params and pick to a snapshot source.")
     }
     if (request.pick !== undefined) {
-      const problems = pickProblemsForOutput(source.output ?? "", request.pick)
+      const problems = pickProblemsForOutput(source.output ?? "", request.pick, source.outputSchema)
       if (problems.length > 0) return refused("SCHEMA_VIOLATION", problems.join("; "), "Pick only paths of the source's output schema.")
     }
   }
@@ -213,7 +213,7 @@ export function acceptAnswer(source: SourceItem, account: string, answer: unknow
     }
     return { ok: true, kind: "events", page: value as EventsPage }
   }
-  const checked = checkOutput(source.output ?? "", value["data"])
+  const checked = checkOutput(source.output ?? "", value["data"], source.outputSchema)
   if (!checked.ok) return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s data breaks the ${source.output} schema: ${checked.problems.slice(0, 3).join("; ")}`, "Report it to the plugin's maintainers.") }
   if (typeof value["asOf"] !== "string" || !Number.isFinite(Date.parse(value["asOf"]))) {
     return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s snapshot has no asOf time`, "Report it to the plugin's maintainers.") }

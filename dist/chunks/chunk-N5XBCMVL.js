@@ -2,7 +2,7 @@
 import {
   findSource,
   maxBytesOf
-} from "./chunk-LABOC2SS.js";
+} from "./chunk-YEPPB2HC.js";
 import {
   ERROR_CODES,
   PAGE,
@@ -26,10 +26,10 @@ import {
 import {
   pick,
   pickProblemsForOutput
-} from "./chunk-HVKVERIX.js";
+} from "./chunk-4ERCA4TK.js";
 import {
   checkOutput
-} from "./chunk-UGUA267L.js";
+} from "./chunk-6HDIB2SA.js";
 
 // src/internal/failure.ts
 var FAILURE_CODES = ERROR_CODES;
@@ -82,7 +82,7 @@ function checkReadRequest(request) {
       return refused("SCHEMA_VIOLATION", "cursor, since and limit are for an events source", "Pass params and pick to a snapshot source.");
     }
     if (request.pick !== void 0) {
-      const problems = pickProblemsForOutput(source.output ?? "", request.pick);
+      const problems = pickProblemsForOutput(source.output ?? "", request.pick, source.outputSchema);
       if (problems.length > 0) return refused("SCHEMA_VIOLATION", problems.join("; "), "Pick only paths of the source's output schema.");
     }
   }
@@ -157,7 +157,7 @@ function acceptAnswer(source, account, answer, options = {}) {
     }
     return { ok: true, kind: "events", page: value };
   }
-  const checked = checkOutput(source.output ?? "", value["data"]);
+  const checked = checkOutput(source.output ?? "", value["data"], source.outputSchema);
   if (!checked.ok) return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s data breaks the ${source.output} schema: ${checked.problems.slice(0, 3).join("; ")}`, "Report it to the plugin's maintainers.") };
   if (typeof value["asOf"] !== "string" || !Number.isFinite(Date.parse(value["asOf"]))) {
     return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s snapshot has no asOf time`, "Report it to the plugin's maintainers.") };

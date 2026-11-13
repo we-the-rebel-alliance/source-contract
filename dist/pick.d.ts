@@ -24,5 +24,10 @@ export declare function missingPaths(data: unknown, paths: readonly string[]): s
  * pick is good.
  */
 export declare function pickProblems(paths: unknown, schema?: JsonSchema): string[];
-/** `pickProblems` against a registered output by name; a name the registry does not hold is a problem. */
-export declare function pickProblemsForOutput(output: string, paths: unknown): string[];
+/**
+ * `pickProblems` against an output by name; a name the registry does not hold is a problem.
+ *
+ * An `x-` output has no registry schema, so `schema` is its source's inline `outputSchema`, and the paths are checked
+ * against that.
+ */
+export declare function pickProblemsForOutput(output: string, paths: unknown, schema?: JsonSchema): string[];

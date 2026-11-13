@@ -446,7 +446,7 @@
         },
         "asserts": [
           {
-            "action": "gws.events_list",
+            "action": "gws.probe",
             "resource": "*"
           },
           {

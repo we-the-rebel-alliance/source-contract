@@ -21,7 +21,7 @@ export type { DeclarationOptions, ToolDeclaration } from "./internal/conformance
 export { assertionMatches, recordingPermission, sameResource, unusedGrants } from "./internal/conformance/permission.ts"
 export type { AssertInput, Assertion, Grant, RecordingPermission, SessionContext } from "./internal/conformance/permission.ts"
 
-export { instant, pageChecks, pageProblems } from "./internal/conformance/page.ts"
+export { pageChecks, pageProblems } from "./internal/conformance/page.ts"
 export type { PageChecks, PageOptions } from "./internal/conformance/page.ts"
 
 export { probeProblems } from "./internal/conformance/probe.ts"

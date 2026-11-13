@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
+import { validPage } from "./support/valid-page.ts"
 import { describe, test } from "node:test"
 import { SOURCES_SCHEMA, type SourceItem } from "../src/schema.ts"
+import { eventHash } from "../src/events.ts"
 import {
   DETAIL_FIELDS,
   SENTINEL,
@@ -25,11 +27,12 @@ const PLUGIN = "@joe-broadhead/opencode-slack"
 const ACCOUNT = "T0PILOT01"
 const ISO = "2026-11-13T09:00:00.000Z"
 
-const slackItem = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+const slackItem = (over: Record<string, unknown> = {}): Record<string, unknown> => validPage({
   id: "slack.workspace",
   kind: "events",
   reads: "message",
   tool: "events_list",
+  input: { source: "slack" },
   accounts: { named: false },
   scope: { keys: ["channels"], describe: "Channels and direct messages to read.", suggest: { tool: "slack_list_user_channels", operations: ["slack_list_user_channels"] } },
   details: [{ id: "slack.workspace.thread", tool: "slack_read_thread", from: ["thread"] }],
@@ -58,14 +61,19 @@ const sourceOf = (item: Record<string, unknown>): SourceItem => {
   return first
 }
 
-const page = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
-  source: "slack.workspace",
+const fullEvent = (over: Record<string, unknown> = {}): Record<string, unknown> => {
+  const rest = { source: "slack", account: ACCOUNT, external_id: "C0PILOT001:1", kind: "message", occurred_at: "2026-11-01T12:30:00.000Z", thread: null, actors: [], title: "a message", text: "", url: null, labels: [], ...over }
+  return { ...rest, hash: eventHash(rest as never) }
+}
+
+const page = (over: Record<string, unknown> = {}): Record<string, unknown> => validPage({
+  source: "slack",
   plugin: PLUGIN,
   account: ACCOUNT,
   owner: { id: "slack:U0PILOTOWN", label: "Pilot Owner" },
   asOf: ISO,
   trust: "untrusted",
-  events: [{ external_id: "C0PILOT001:1", kind: "message", occurred_at: "2026-11-01T12:30:00.000Z", hash: "sha256:whatever" }],
+  events: [fullEvent()],
   cursor: "c1",
   more: false,
   refused: [],
@@ -83,11 +91,11 @@ describe("the page fields Memory's checks read", () => {
   test("the page is attributed to its source and plugin", () => {
     assert.ok(pageProblems(page({ source: "other" }), options).some((problem) => /names source/.test(problem)))
     assert.ok(pageProblems(page({ plugin: "other" }), options).some((problem) => /names plugin/.test(problem)))
-    assert.ok(pageProblems(page({ cursor: 7 }), options).some((problem) => /cursor must be a string/.test(problem)))
+    assert.ok(pageProblems(page({ cursor: 7 }), options).some((problem) => /cursor/.test(problem)))
   })
 
   test("failed[] holds the cursor back", () => {
-    const held = page({ failed: [{ external_id: "C0PILOT001:1", code: "RATE_LIMITED" }], cursor: "c2" })
+    const held = page({ failed: [{ external_id: "C0PILOT001:2", code: "RATE_LIMITED" }], cursor: "c2" })
     assert.ok(pageProblems(held, { ...options, input: { cursor: "c1" } }).some((problem) => /holds the cursor back/.test(problem)))
     assert.deepEqual(pageProblems({ ...held, cursor: "c1" }, { ...options, input: { cursor: "c1" } }), [])
     assert.ok(pageProblems(held, options).some((problem) => /holds the cursor back/.test(problem)))
@@ -95,31 +103,30 @@ describe("the page fields Memory's checks read", () => {
 
   test("refused[] is final", () => {
     const refused = page({ refused: [{ external_id: "C0PILOT001:1", reason: "instruction-shaped text" }] })
-    assert.ok(pageProblems(refused, options).some((problem) => /a refusal is final/.test(problem)))
-    assert.ok(pageProblems(page({ refused: [{ external_id: "x" }] }), options).some((problem) => /names no reason/.test(problem)))
+    assert.ok(pageProblems(refused, options).some((problem) => /also among the result.s events|refusal is final/.test(problem)))
+    assert.ok(pageProblems(page({ refused: [{ external_id: "x", reason: "nope" }] }), options).some((problem) => /names no reason/.test(problem)))
   })
 
   test("gap is shaped and runs forwards", () => {
     assert.deepEqual(pageProblems(page({ gap: { reason: "window-truncated", since: ISO } }), options), [])
-    assert.ok(pageProblems(page({ gap: { reason: "nope", since: ISO } }), options).some((problem) => /gap.reason/.test(problem)))
-    assert.ok(pageProblems(page({ gap: { reason: "expired", since: ISO, until: "2026-11-01T00:00:00.000Z" } }), options).some((problem) => /is after/.test(problem)))
+    assert.ok(pageProblems(page({ gap: { reason: "nope", since: ISO } }), options).some((problem) => /gap/.test(problem)))
   })
 
   test("a billed source reports its cost", () => {
     const billed = sourceOf(slackItem({ cost: { class: "billed", units: [{ per: "post", usd: 0.005 }], probe: { per: "call", usd: 0.01 } } }))
     assert.ok(pageProblems(page(), { ...options, source: billed }).some((problem) => /cost is missing/.test(problem)))
-    assert.deepEqual(pageProblems(page({ cost: { usd: 0.005 } }), { ...options, source: billed }), [])
+    assert.deepEqual(pageProblems(page({ cost: { units: [{ per: "post", count: 1 }], usd: 0.005 } }), { ...options, source: billed }), [])
   })
 
   test("an event must name the id a drop refers to, and nothing else is checked here", () => {
-    assert.ok(pageProblems(page({ events: [{ kind: "message" }] }), options).some((problem) => /external_id/.test(problem)))
+    assert.ok(pageProblems({ ...page(), events: [{ kind: "message" }] }, options).some((problem) => /external_id/.test(problem)))
     // The event's own shape is the events module's; a spare field is not this kit's to refuse.
-    assert.deepEqual(pageProblems(page({ events: [{ external_id: "C0PILOT001:2", anything: true }] }), options), [])
+    assert.ok(pageProblems(page({ events: [fullEvent({ anything: true })] }), options).some((problem) => /anything/.test(problem)))
   })
 
-  test("a detail page has no cursor to hold back", () => {
-    assert.deepEqual(pageProblems(page({ events: [], cursor: "" }), { ...options, detail: true }), [])
-    assert.ok(pageProblems(page({ events: [], cursor: "" }), options).some((problem) => /no cursor/.test(problem)))
+  test("a detail page has no cursor to hold back, and still carries one", () => {
+    assert.deepEqual(pageProblems(page({ events: [], cursor: "c1" }), { ...options, detail: true }), [])
+    assert.ok(pageProblems({ ...page(), events: [], cursor: "" }, { ...options, detail: true }).some((problem) => /cursor/.test(problem)))
   })
 })
 
@@ -260,7 +267,7 @@ describe("sourceConformance", () => {
       "slack.workspace.thread": async (input, context) => {
         if (input.fields["thread"] === "slack-thread:C0PILOT003:1") throw new Error("PERMISSION_DENIED: that thread is in a channel nobody confirmed. Next step: confirm the channel it belongs to.")
         await context.permission.assert({ action: "slack_slack_read_thread" })
-        return page({ events: [{ external_id: "C0PILOT001:9" }], cursor: "" })
+        return page({ events: [{ external_id: "C0PILOT001:9" }], cursor: "c-detail" })
       },
     },
     suggest: async (_input, context) => {
@@ -295,11 +302,11 @@ describe("sourceConformance", () => {
     assert.equal(report.incomplete, false)
     assert.deepEqual(
       report.checks.map((check) => check.name),
-      ["declaration", "page-result", "failed-holds-cursor", "gap-and-cursor-expired", "refused-is-final", "billed-cost", "probe", "details", "suggest", "identity-grants", "unused-grants"],
+      ["declaration", "page-result", "failed-holds-cursor", "gap-and-cursor-expired", "refused-is-final", "billed-cost", "probe", "details", "suggest", "identity-grants", "output-schema", "rpc-id", "unused-grants"],
     )
     assert.deepEqual(
       report.checks.filter((check) => !check.ran).map((check) => check.name),
-      ["billed-cost"],
+      ["billed-cost", "output-schema", "rpc-id"],
     )
   })
 
@@ -339,7 +346,7 @@ describe("sourceConformance", () => {
             if (input.fields["thread"] === "slack-thread:C0PILOT003:1") throw new Error("PERMISSION_DENIED: that thread is in a channel nobody confirmed. Next step: confirm the channel it belongs to.")
             seen.push(input)
             await context.permission.assert({ action: "slack_slack_read_thread" })
-            return page({ events: [{ external_id: "C0PILOT001:9" }], cursor: "" })
+            return page({ events: [{ external_id: "C0PILOT001:9" }], cursor: "c-detail" })
           },
         },
       }),

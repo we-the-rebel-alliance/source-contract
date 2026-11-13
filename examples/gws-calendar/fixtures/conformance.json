@@ -310,9 +310,9 @@
             }
           },
           "expect": {
-            "refuses": "SCOPE_UNKNOWN"
+            "refuses": "INPUT_INVALID"
           },
-          "refuses": "SCOPE_UNKNOWN: this source reads calendars, not labels. Next step: confirm the calendars to read.",
+          "refuses": "INPUT_INVALID: this source reads calendars, not labels. Next step: confirm the calendars to read.",
           "asserts": []
         }
       ],
@@ -323,7 +323,7 @@
         },
         "asserts": [
           {
-            "action": "gws.events_list",
+            "action": "gws.probe",
             "resource": "*"
           },
           {
@@ -357,7 +357,7 @@
         },
         "asserts": [
           {
-            "action": "gws.calendar_today",
+            "action": "gws.probe",
             "resource": "*"
           },
           {

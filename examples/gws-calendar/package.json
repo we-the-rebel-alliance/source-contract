@@ -29,6 +29,9 @@
           "operations": [
             "calendar.calendarList.get",
             "calendar.events.list"
+          ],
+          "identity": [
+            "calendar.calendarList.get"
           ]
         },
         "private": true,
@@ -59,6 +62,9 @@
           "operations": [
             "calendar.calendars.get",
             "calendar.events.list"
+          ],
+          "identity": [
+            "calendar.calendars.get"
           ]
         },
         "private": true,
@@ -71,6 +77,10 @@
           "calendar.google.com"
         ]
       }
-    ]
+    ],
+    "rpc": "google-workspace.gws.tools",
+    "probe": {
+      "action": "gws.probe"
+    }
   }
 }

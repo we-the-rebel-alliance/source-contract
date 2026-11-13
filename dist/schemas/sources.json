@@ -6,6 +6,26 @@
       "type": "number",
       "const": 1
     },
+    "rpc": {
+      "description": "The plugin's tools-RPC id (#4, #8), which a consumer calls instead of mapping the package.",
+      "type": "string",
+      "maxLength": 200
+    },
+    "probe": {
+      "description": "The plugin's one probe tool, and the permission action it asserts (#4, #8).",
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "maxLength": 80,
+          "pattern": "^(?:[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "additionalProperties": false
+    },
     "items": {
       "minItems": 1,
       "type": "array",
@@ -279,9 +299,8 @@
               },
               "reads": {
                 "type": "string",
-                "maxLength": 32,
-                "pattern": "^[a-z][a-z0-9-]{0,31}$",
-                "description": "The thing it reads."
+                "maxLength": 64,
+                "description": "The thing it reads: a core kind, or x-<namespace>/<name>, whose namespace is the source's."
               },
               "details": {
                 "type": "array",
@@ -337,20 +356,54 @@
                   "tool": {
                     "not": {}
                   },
-                  "operations": {
+                  "identity": {
+                    "description": "The identity operations probe asserts for this source (#4, #8). None may be a content operation.",
                     "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "string",
                       "maxLength": 200,
                       "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
-                    },
-                    "description": "Every operation the source's reads assert, and nothing else."
+                    }
+                  },
+                  "operations": {
+                    "description": "Every operation the source's reads assert, and nothing else. Absent when `rules` states them.",
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200,
+                      "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
+                    }
+                  },
+                  "rules": {
+                    "description": "The grants verbatim, for a provider whose resources are not <account>:<operation> (GitHub's github_api on GET /user).",
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "action": {
+                          "type": "string",
+                          "maxLength": 80,
+                          "pattern": "^(?:[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$"
+                        },
+                        "resource": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "description": "The resource the action is asserted on, such as GET /user."
+                        }
+                      },
+                      "required": [
+                        "action",
+                        "resource"
+                      ],
+                      "additionalProperties": false
+                    }
                   }
                 },
                 "required": [
-                  "events",
-                  "operations"
+                  "events"
                 ],
                 "additionalProperties": false,
                 "description": "The events_list action, and the provider operations the source asserts."
@@ -644,9 +697,21 @@
               },
               "output": {
                 "type": "string",
-                "maxLength": 32,
-                "pattern": "^[a-z][a-z0-9-]{0,31}$",
-                "description": "The name of its schema in the output registry. The registry itself is the app's."
+                "maxLength": 64,
+                "description": "A registry name, or x-<namespace>/<name>; an x- output carries its schema inline."
+              },
+              "outputSchema": {
+                "description": "An x- output's schema, inline: JSON Schema draft 2020-12. Required for x-, absent for a registry name.",
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": {}
+                  }
+                ]
               },
               "params": {
                 "description": "The parameters a consumer may pass, resolved by the library at read time.",
@@ -665,20 +730,54 @@
                   "events": {
                     "not": {}
                   },
-                  "operations": {
+                  "identity": {
+                    "description": "The identity operations probe asserts for this source (#4, #8). None may be a content operation.",
                     "minItems": 1,
                     "type": "array",
                     "items": {
                       "type": "string",
                       "maxLength": 200,
                       "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
-                    },
-                    "description": "Every operation the source's reads assert, and nothing else."
+                    }
+                  },
+                  "operations": {
+                    "description": "Every operation the source's reads assert, and nothing else. Absent when `rules` states them.",
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 200,
+                      "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
+                    }
+                  },
+                  "rules": {
+                    "description": "The grants verbatim, for a provider whose resources are not <account>:<operation> (GitHub's github_api on GET /user).",
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "action": {
+                          "type": "string",
+                          "maxLength": 80,
+                          "pattern": "^(?:[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$"
+                        },
+                        "resource": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "description": "The resource the action is asserted on, such as GET /user."
+                        }
+                      },
+                      "required": [
+                        "action",
+                        "resource"
+                      ],
+                      "additionalProperties": false
+                    }
                   }
                 },
                 "required": [
-                  "tool",
-                  "operations"
+                  "tool"
                 ],
                 "additionalProperties": false,
                 "description": "The read tool's action, and the provider operations the source asserts."

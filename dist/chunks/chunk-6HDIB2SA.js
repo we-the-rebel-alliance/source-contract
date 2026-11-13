@@ -4,14 +4,16 @@ import {
   _null,
   array,
   boolean,
+  fromJSONSchema,
   iso_exports,
   number,
   object,
+  problemsOf,
   record,
   string,
   union,
   validator
-} from "./chunk-6RDMPYYW.js";
+} from "./chunk-W5SHR7DQ.js";
 
 // src/registry.ts
 var text = (max) => string().max(max);
@@ -154,10 +156,19 @@ function isOutputName(name) {
 function outputValidator(name) {
   return isOutputName(name) ? OUTPUTS[name] : void 0;
 }
-function checkOutput(name, data) {
+var EXTENSION_OUTPUT = /^x-[a-z][a-z0-9-]{0,31}\/[a-z][a-z0-9-]{0,31}$/;
+function isExtensionOutput(name) {
+  return typeof name === "string" && EXTENSION_OUTPUT.test(name);
+}
+function checkOutput(name, data, schema) {
   const found = outputValidator(name);
-  if (!found) return { ok: false, problems: [`"${name}" is not a registered output (${OUTPUT_NAMES.join(", ")})`] };
-  return found.check(data);
+  if (found) return found.check(data);
+  if (isExtensionOutput(name)) {
+    if (schema === void 0) return { ok: false, problems: [`"${name}" is an extension output and its source states no outputSchema`] };
+    const checked = fromJSONSchema(schema).safeParse(data);
+    return checked.success ? { ok: true, value: checked.data } : { ok: false, problems: problemsOf(checked.error) };
+  }
+  return { ok: false, problems: [`"${name}" is not a registered output (${OUTPUT_NAMES.join(", ")})`] };
 }
 
 export {
@@ -166,5 +177,7 @@ export {
   OUTPUT_NAMES,
   isOutputName,
   outputValidator,
+  EXTENSION_OUTPUT,
+  isExtensionOutput,
   checkOutput
 };

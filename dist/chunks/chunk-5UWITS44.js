@@ -15,7 +15,7 @@ import {
   record,
   string,
   unknown
-} from "./chunk-3F4IRHS5.js";
+} from "./chunk-64DASBTN.js";
 
 // src/descriptor.ts
 import { createHash } from "node:crypto";

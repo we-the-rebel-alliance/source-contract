@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
-import { checkOutput, isOutputName, OUTPUT_NAMES, OUTPUTS, outputValidator } from "../src/registry.ts"
+import { checkOutput, IMAGE_DATA_URI_MAX, isOutputName, OUTPUT_NAMES, OUTPUTS, outputValidator } from "../src/registry.ts"
 
 /** One valid `data` per registered output: what a source answers, and what a project renders. */
 const VALID: Record<string, unknown> = {
@@ -52,10 +52,13 @@ describe("the output registry", () => {
     assert.equal(checkOutput("image", { alt: "x", url: "https://example.com/a.png" }).ok, true)
   })
 
-  test("lets an image carry up to 1 MB, the most a source's maxBytes allows", () => {
-    const megabyte = "A".repeat(Math.ceil((1024 * 1024 * 4) / 3))
-    assert.equal(checkOutput("image", { alt: "x", dataUri: `data:image/jpeg;base64,${megabyte}` }).ok, true)
-    assert.equal(checkOutput("image", { alt: "x", dataUri: `data:image/jpeg;base64,${megabyte}${"A".repeat(200)}` }).ok, false)
+  test("caps an image's data URI so the whole answer fits in the 1 MB a source's maxBytes allows", () => {
+    const prefix = "data:image/jpeg;base64,"
+    const fits = `${prefix}${"A".repeat(IMAGE_DATA_URI_MAX - prefix.length)}`
+    assert.equal(checkOutput("image", { alt: "x", dataUri: fits }).ok, true)
+    assert.equal(checkOutput("image", { alt: "x", dataUri: `${fits}AAAA` }).ok, false)
+    const answer = { source: "images", account: "ana@example.com", data: { alt: "x".repeat(200), caption: "c".repeat(120), dataUri: fits }, asOf: "2026-11-13T09:41:00Z", trust: "untrusted" }
+    assert.ok(new TextEncoder().encode(JSON.stringify(answer)).length <= 1024 * 1024)
   })
 
   test("answers a name it does not hold with a problem, not a throw", () => {

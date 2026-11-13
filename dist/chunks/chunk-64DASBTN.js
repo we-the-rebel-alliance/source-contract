@@ -6493,7 +6493,7 @@ var item = {
   url: httpsUrl.optional(),
   ask: text(200).optional()
 };
-var DATA_URI_MAX = Math.ceil(1024 * 1024 * 4 / 3) + 64;
+var IMAGE_DATA_URI_MAX = 1024 * 1024 - 4 * 1024;
 var agenda = object({
   items: array(
     object({
@@ -6573,7 +6573,7 @@ var countdown = object({
 }).strict();
 var image = object({
   url: httpsUrl.optional(),
-  dataUri: string2().max(DATA_URI_MAX).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/, "must be a base64 data URI of a png, jpeg or webp image").optional(),
+  dataUri: string2().max(IMAGE_DATA_URI_MAX).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/, "must be a base64 data URI of a png, jpeg or webp image").optional(),
   alt: string2().min(1).max(200),
   caption: text(120).optional()
 }).strict().refine((value) => value.url === void 0 !== (value.dataUri === void 0), { message: "give exactly one of url and dataUri" });
@@ -6635,6 +6635,7 @@ export {
   record,
   _enum,
   problemsOf,
+  IMAGE_DATA_URI_MAX,
   OUTPUTS,
   OUTPUT_NAMES,
   isOutputName,

@@ -1,4 +1,10 @@
 import type { Checked, Validator } from "./internal/checked.js";
+/**
+ * The most characters a `dataUri` takes: 1 MB less 4 KB, so the whole answer (the data URI, the other fields and the
+ * envelope) fits in the 1 MB that `maxBytes` allows, counted as the answer's JSON bytes (#7, decision 21). That is about
+ * 760 KB of image; a source downsizes a larger one, or answers an https `url`.
+ */
+export declare const IMAGE_DATA_URI_MAX: number;
 /** Every registered output, by name. */
 export declare const OUTPUTS: {
     agenda: Validator<{

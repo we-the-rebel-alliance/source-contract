@@ -131,12 +131,15 @@ export interface DetailRequest {
     readonly signal?: AbortSignal;
 }
 /**
- * The detail's input, taken only from the event's API fields (`external_id`, `thread`, and `thread`'s channel and
- * timestamp), never from its text, and pinned to the confirmed scope: a channel must be one the grant holds under the
- * detail's `within` key.
+ * The detail's `fields`: exactly the event fields its `from` names, taken from the event as the source listed it, and
+ * nothing else. An event's `title` and `text` are never among them, so item text cannot choose what is read next.
  */
-export declare function detailInput(source: SourceItem, detailId: string, event: Readonly<Record<string, unknown>>, grant: Pick<Grant, "scope">): Checked<Record<string, string>>;
-/** Reads a declared detail of one event, in a session fenced by the detail's own rules. */
+export declare function detailFields(source: SourceItem, detailId: string, event: Readonly<Record<string, unknown>>): Checked<Record<string, unknown>>;
+/**
+ * Reads a declared detail of one event, in a session fenced by the source's own rules. The call is what Memory's
+ * conformance kit checks a plugin with: `{ account, scope, fields }`, with the confirmed scope, so the plugin refuses an
+ * event outside it.
+ */
 export declare function readDetail(host: ReadHost, request: DetailRequest): Promise<{
     readonly ok: true;
     readonly answer: unknown;
@@ -153,11 +156,15 @@ export interface ProbeAnswer {
     };
     readonly scopes?: readonly string[];
 }
-/** Probes a source for an account, in a session fenced by its probe rules. */
+/**
+ * Probes a source for an account, in a session fenced by its probe rules: the source's own action and the identity
+ * operations the caller names (the descriptor does not list them yet; source-contract#4).
+ */
 export declare function probe(host: ReadHost, request: {
     readonly installed: InstalledDescriptor;
     readonly source: string;
     readonly account: string;
+    readonly identityOperations: readonly string[];
     readonly signal?: AbortSignal;
 }): Promise<{
     readonly ok: true;

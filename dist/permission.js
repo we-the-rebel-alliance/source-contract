@@ -7,9 +7,11 @@ import {
   evaluate,
   grantCovers,
   methodAction,
+  namespaceOf,
+  operationRule,
   probeRules,
   sessionRules
-} from "./chunks/chunk-36GA4GB4.js";
+} from "./chunks/chunk-F2EQTQXI.js";
 import "./chunks/chunk-HLVAKAYG.js";
 export {
   ACCOUNT_PATTERN,
@@ -19,6 +21,8 @@ export {
   evaluate,
   grantCovers,
   methodAction,
+  namespaceOf,
+  operationRule,
   probeRules,
   sessionRules
 };

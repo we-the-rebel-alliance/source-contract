@@ -2,12 +2,12 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { describe, test } from "node:test"
 import type { SourceItem } from "../src/descriptor.ts"
-import { accountProblem, DENY_ALL, detailRules, evaluate, grantCovers, probeRules, sessionRules, type Grant } from "../src/permission.ts"
+import { accountProblem, DENY_ALL, detailRules, evaluate, grantCovers, namespaceOf, operationRule, probeRules, sessionRules, type Grant } from "../src/permission.ts"
 import type { Checked } from "../src/index.ts"
 
 const problemsIn = (checked: Checked<unknown>): readonly string[] => (checked.ok ? [] : checked.problems)
 
-const items = (name: string): SourceItem[] => JSON.parse(readFileSync(new URL(`../examples/${name}/package.json`, import.meta.url), "utf8")).sources.items
+const items = (name: string): SourceItem[] => JSON.parse(readFileSync(new URL(`./descriptors/${name}/package.json`, import.meta.url), "utf8")).sources.items
 const [gmail, today] = items("gws") as [SourceItem, SourceItem]
 const [slack] = items("slack") as [SourceItem]
 const ana = "ana@example.com"
@@ -28,13 +28,19 @@ describe("sessionRules", () => {
     ])
   })
 
-  test("Slack: each operation is an MCP action, allowed on *", () => {
-    assert.deepEqual(rulesOf(sessionRules(slack, { source: "slack.channels", account: "T0123" })), [
+  test("Slack: each bare operation is an MCP tool, allowed as <namespace>_<operation> on *", () => {
+    assert.deepEqual(rulesOf(sessionRules(slack, { source: "slack.workspace", account: "T0123" })), [
       DENY_ALL,
       { action: "slack_events_list", resource: "*", effect: "allow" },
-      { action: "slack_slack_read_user_profile", resource: "*", effect: "allow" },
       { action: "slack_slack_read_channel", resource: "*", effect: "allow" },
+      { action: "slack_slack_read_thread", resource: "*", effect: "allow" },
     ])
+  })
+
+  test("derive each operation's rule as Memory's conformance kit does", () => {
+    assert.deepEqual(operationRule(gmail, "gmail.users.messages.get", ana), { action: "gws.read", resource: `${ana}:gmail.users.messages.get`, effect: "allow" })
+    assert.deepEqual(operationRule(slack, "slack_read_channel", "T0123"), { action: "slack_slack_read_channel", resource: "*", effect: "allow" })
+    assert.equal(namespaceOf(today), "gws")
   })
 
   test("fence a session exactly: what is declared runs, nothing else does, and no other account", () => {
@@ -66,33 +72,32 @@ describe("sessionRules", () => {
 })
 
 describe("detail and probe rules", () => {
-  test("a detail read is fenced to its own action", () => {
-    const rules = detailRules(slack, "slack.thread", { source: "slack.channels", account: "T0123" })
-    assert.ok(rules.ok)
-    assert.deepEqual(rules.value, [DENY_ALL, { action: "slack_slack_read_thread", resource: "*", effect: "allow" }])
-    assert.equal(detailRules(gmail, "gws.gmail.message", { source: "gws.gmail", account: ana }).ok, false)
-    assert.equal(detailRules(slack, "slack.nothing", { source: "slack.channels", account: "T0123" }).ok, false)
+  test("a detail read runs under the source's own rules", () => {
+    const rules = detailRules(slack, "slack.workspace.thread", { source: "slack.workspace", account: "T0123" })
+    assert.deepEqual(rules, sessionRules(slack, { source: "slack.workspace", account: "T0123" }))
+    assert.equal(detailRules(slack, "slack.nothing", { source: "slack.workspace", account: "T0123" }).ok, false)
   })
 
-  test("a probe is fenced to its action and its own operations", () => {
-    const declared = { ...gmail, permission: { ...gmail.permission, probe: { action: "gws.probe", operations: ["gmail.users.getProfile"] } } }
-    const rules = probeRules(declared, ana)
+  test("a probe is fenced to the source's action and its identity operations, which are never content", () => {
+    const rules = probeRules(gmail, ana, ["gmail.users.getProfile"])
     assert.ok(rules.ok)
+    assert.equal(evaluate(rules.value, "gws.events_list"), "allow")
     assert.equal(evaluate(rules.value, "gws.read", `${ana}:gmail.users.getProfile`), "allow")
     assert.equal(evaluate(rules.value, "gws.read", `${ana}:gmail.users.messages.get`), "deny")
-    assert.equal(probeRules(gmail, ana).ok, false)
+    assert.match(problemsIn(probeRules(gmail, ana, ["gmail.users.messages.get"]))[0]!, /content operation/)
+    assert.equal(probeRules(gmail, "*", []).ok, false)
   })
 })
 
 describe("grantCovers", () => {
-  const grant: Grant = { consumer: "memory", source: "slack.channels", account: "T0123", scope: { channels: ["C01", "C02"] }, descriptorHash: "sha256:x" }
+  const grant: Grant = { consumer: "memory", source: "slack.workspace", account: "T0123", scope: { channels: ["C01", "C02"] }, descriptorHash: "sha256:x" }
 
   test("covers the same source and account within the granted scope only", () => {
-    assert.equal(grantCovers(grant, { source: "slack.channels", account: "T0123", scope: { channels: ["C01"] } }), true)
-    assert.equal(grantCovers(grant, { source: "slack.channels", account: "T0123" }), true)
-    assert.equal(grantCovers(grant, { source: "slack.channels", account: "T0123", scope: { channels: ["C01", "C03"] } }), false)
-    assert.equal(grantCovers(grant, { source: "slack.channels", account: "T9999", scope: { channels: ["C01"] } }), false)
+    assert.equal(grantCovers(grant, { source: "slack.workspace", account: "T0123", scope: { channels: ["C01"] } }), true)
+    assert.equal(grantCovers(grant, { source: "slack.workspace", account: "T0123" }), true)
+    assert.equal(grantCovers(grant, { source: "slack.workspace", account: "T0123", scope: { channels: ["C01", "C03"] } }), false)
+    assert.equal(grantCovers(grant, { source: "slack.workspace", account: "T9999", scope: { channels: ["C01"] } }), false)
     assert.equal(grantCovers(grant, { source: "gws.gmail", account: "T0123" }), false)
-    assert.equal(grantCovers(grant, { source: "slack.channels", account: "T0123", scope: { labels: ["INBOX"] } }), false)
+    assert.equal(grantCovers(grant, { source: "slack.workspace", account: "T0123", scope: { labels: ["INBOX"] } }), false)
   })
 })

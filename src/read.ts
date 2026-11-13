@@ -242,39 +242,27 @@ export interface DetailRequest {
   readonly signal?: AbortSignal
 }
 
-/** `<scheme>-thread:<channel>:<ts>`, as contract 1's events carry `thread`. */
-const THREAD = /^[a-z][a-z0-9+.-]*-thread:([^:\s]+):([^:\s]+)$/
-
 /**
- * The detail's input, taken only from the event's API fields (`external_id`, `thread`, and `thread`'s channel and
- * timestamp), never from its text, and pinned to the confirmed scope: a channel must be one the grant holds under the
- * detail's `within` key.
+ * The detail's `fields`: exactly the event fields its `from` names, taken from the event as the source listed it, and
+ * nothing else. An event's `title` and `text` are never among them, so item text cannot choose what is read next.
  */
-export function detailInput(source: SourceItem, detailId: string, event: Readonly<Record<string, unknown>>, grant: Pick<Grant, "scope">): Checked<Record<string, string>> {
+export function detailFields(source: SourceItem, detailId: string, event: Readonly<Record<string, unknown>>): Checked<Record<string, unknown>> {
   const detail = source.details?.find((entry) => entry.id === detailId)
   if (!detail) return { ok: false, problems: [`${source.id} declares no detail read ${detailId}`] }
-  const thread = typeof event["thread"] === "string" ? THREAD.exec(event["thread"]) : null
-  const fields: Record<string, string | undefined> = {
-    external_id: typeof event["external_id"] === "string" ? event["external_id"] : undefined,
-    thread: typeof event["thread"] === "string" ? event["thread"] : undefined,
-    thread_channel: thread?.[1],
-    thread_ts: thread?.[2],
-  }
-  const input: Record<string, string> = {}
+  const fields: Record<string, unknown> = {}
   const problems: string[] = []
   for (const field of detail.from) {
-    const value = fields[field]
-    if (value === undefined) problems.push(`the event has no ${field} for ${detailId}`)
-    else input[field] = value
+    if (event[field] === undefined || event[field] === null) problems.push(`the event has no ${field} for ${detailId}`)
+    else fields[field] = event[field]
   }
-  if (input["thread_channel"] !== undefined) {
-    const confirmed = detail.within === undefined ? undefined : grant.scope?.[detail.within]
-    if (!confirmed?.includes(input["thread_channel"])) problems.push(`the event's channel is not in the confirmed ${detail.within ?? "scope"}`)
-  }
-  return problems.length === 0 ? { ok: true, value: input } : { ok: false, problems }
+  return problems.length === 0 ? { ok: true, value: fields } : { ok: false, problems }
 }
 
-/** Reads a declared detail of one event, in a session fenced by the detail's own rules. */
+/**
+ * Reads a declared detail of one event, in a session fenced by the source's own rules. The call is what Memory's
+ * conformance kit checks a plugin with: `{ account, scope, fields }`, with the confirmed scope, so the plugin refuses an
+ * event outside it.
+ */
 export async function readDetail(host: ReadHost, request: DetailRequest): Promise<{ readonly ok: true; readonly answer: unknown } | { readonly ok: false; readonly failure: ReadFailure }> {
   const { installed, grant } = request
   const source = findSource(installed.sources, request.source)
@@ -286,13 +274,14 @@ export async function readDetail(host: ReadHost, request: DetailRequest): Promis
   if (request.event["account"] !== undefined && request.event["account"] !== grant.account) {
     return { ok: false, failure: failure("ACCOUNT_MISMATCH", "the event is another account's", "Read details only for events of the granted account.") }
   }
-  const input = detailInput(source, request.detail, request.event, grant)
-  if (!input.ok) return { ok: false, failure: failure("PERMISSION_DENIED", input.problems.join("; "), "Read details only for events of the confirmed scope.") }
+  const fields = detailFields(source, request.detail, request.event)
+  if (!fields.ok) return { ok: false, failure: failure("SCHEMA_VIOLATION", fields.problems.join("; "), "Read details only for events the source listed.") }
   const detail = source.details!.find((entry) => entry.id === request.detail)!
+  const scope = grant.scope === undefined ? {} : (canonicalScope(grant.scope) as Record<string, string[]>)
   const called = await fencedCall(
     host,
     detailRules(source, request.detail, grant),
-    { package: installed.package, method: detail.tool, input: { ...input.value, account: grant.account }, ...(request.signal ? { signal: request.signal } : {}) },
+    { package: installed.package, method: detail.tool, input: { account: grant.account, scope, fields: fields.value }, ...(request.signal ? { signal: request.signal } : {}) },
     `${request.consumer} reads ${request.detail}`,
   )
   if (!called.ok) return called
@@ -307,13 +296,16 @@ export interface ProbeAnswer {
   readonly scopes?: readonly string[]
 }
 
-/** Probes a source for an account, in a session fenced by its probe rules. */
-export async function probe(host: ReadHost, request: { readonly installed: InstalledDescriptor; readonly source: string; readonly account: string; readonly signal?: AbortSignal }): Promise<{ readonly ok: true; readonly answer: ProbeAnswer } | { readonly ok: false; readonly failure: ReadFailure }> {
+/**
+ * Probes a source for an account, in a session fenced by its probe rules: the source's own action and the identity
+ * operations the caller names (the descriptor does not list them yet; source-contract#4).
+ */
+export async function probe(host: ReadHost, request: { readonly installed: InstalledDescriptor; readonly source: string; readonly account: string; readonly identityOperations: readonly string[]; readonly signal?: AbortSignal }): Promise<{ readonly ok: true; readonly answer: ProbeAnswer } | { readonly ok: false; readonly failure: ReadFailure }> {
   const source = findSource(request.installed.sources, request.source)
   if (!source) return { ok: false, failure: failure("UNAVAILABLE", `${request.installed.package} declares no source ${request.source}`, "Check the source id.") }
   const called = await fencedCall(
     host,
-    probeRules(source, request.account),
+    probeRules(source, request.account, request.identityOperations),
     { package: request.installed.package, method: "probe", input: { ...(source.input ?? {}), account: request.account }, ...(request.signal ? { signal: request.signal } : {}) },
     `probe ${source.id}`,
   )

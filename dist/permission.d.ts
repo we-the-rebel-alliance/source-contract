@@ -11,8 +11,10 @@
  *
  * The method's action is allowed on `*`, because the tools RPC resolves a method before dispatch on `*` (version 2; a
  * method with a version 2.3 resource resolver is resolved on its resource, which the operation rules cover). Each
- * operation is allowed on `<account>:<operation>` under the source's `operationAction`, or, without one, is itself an
- * action allowed on `*` (an MCP tool such as `slack_slack_read_channel`).
+ * operation is allowed as Memory's schema and conformance kit read it (`operationRule`): a dotted operation as
+ * `<namespace>.read` on `<account>:<operation>` (gws: `gws.read` on `ana@example.com:gmail.users.messages.get`), and a
+ * bare one, an MCP tool, as `<namespace>_<operation>` on `*` (Slack: `slack_slack_read_channel`). The namespace is the
+ * source id's first segment.
  *
  * The broker and a project may only narrow these rules, and the plugin's own `access` setting stays final.
  */
@@ -51,6 +53,14 @@ export declare const DENY_ALL: PermissionRule;
 export declare const ACCOUNT_PATTERN: RegExp;
 /** Why `account` cannot be named in a rule, or undefined when it can. */
 export declare function accountProblem(account: unknown): string | undefined;
+/** A source's namespace: its id's first segment, which every action of the source begins with. */
+export declare function namespaceOf(source: Pick<SourceItem, "id">): string;
+/**
+ * The rule that allows one operation for `account`: a dotted operation as `<namespace>.read` on
+ * `<account>:<operation>`, a bare one (an MCP tool) as `<namespace>_<operation>` on `*`. The same derivation as Memory's
+ * conformance kit, so declared equals asserted means the same thing in a plugin's CI and in a consumer's session.
+ */
+export declare function operationRule(source: Pick<SourceItem, "id">, operation: string, account: string): PermissionRule;
 /** The method action a source's read asserts. */
 export declare function methodAction(source: SourceItem): string | undefined;
 /**
@@ -60,15 +70,17 @@ export declare function methodAction(source: SourceItem): string | undefined;
  */
 export declare function sessionRules(source: SourceItem, grant: Pick<Grant, "source" | "account">): Checked<readonly PermissionRule[]>;
 /**
- * The session rules for one detail read of `source` under `grant`: deny everything, then allow the detail's own action
- * and operations. Refused when the detail declares no permission.
+ * The session rules for one detail read of `source` under `grant`: the source's own rules. A detail read is part of
+ * the source's read (Slack's thread read is one of its declared operations), so it asserts nothing the source does not
+ * declare. Refused when the source declares no such detail.
  */
 export declare function detailRules(source: SourceItem, detailId: string, grant: Pick<Grant, "source" | "account">): Checked<readonly PermissionRule[]>;
 /**
- * The session rules for the source's `probe` on `account`: deny everything, then allow the probe's action and its
- * operations, which read no content. Refused when the source declares no probe permission.
+ * The session rules for the source's `probe` on `account`: deny everything, then allow the source's own action and its
+ * identity operations, which read no content and are never among its content operations (Memory's kit checks both).
+ * The descriptor does not list identity operations yet, so the caller passes them (source-contract#4).
  */
-export declare function probeRules(source: SourceItem, account: string): Checked<readonly PermissionRule[]>;
+export declare function probeRules(source: SourceItem, account: string, identityOperations: readonly string[]): Checked<readonly PermissionRule[]>;
 /**
  * How OpenCode decides an action on a resource under `rules`: the last rule whose action and resource match wins (`*`
  * matches any run of characters and `?` one), and no match asks. The same evaluation the tools RPC runs.

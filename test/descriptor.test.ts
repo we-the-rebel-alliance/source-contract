@@ -9,7 +9,7 @@ import type { Checked } from "../src/index.ts"
 
 const problemsIn = (checked: Checked<unknown>): readonly string[] => (checked.ok ? [] : checked.problems)
 
-const examples = fileURLToPath(new URL("../examples/", import.meta.url))
+const examples = fileURLToPath(new URL("./descriptors/", import.meta.url))
 const exampleSources = (name: string) => JSON.parse(readFileSync(join(examples, name, "package.json"), "utf8")).sources
 const scratch = mkdtempSync(join(tmpdir(), "descriptor-test-"))
 after(() => rmSync(scratch, { recursive: true, force: true }))
@@ -102,16 +102,18 @@ describe("the frame", () => {
     assert.deepEqual(problemsOf(withItem((item) => (item.cost = { class: "billed", units: [{ per: "post", usd: 0.005 }], probe: { per: "call", usd: 0.01 } }))), [])
   })
 
-  test("keeps a detail read in the confirmed scope", () => {
-    const slack = exampleSources("slack")
-    slack.items[0].details[0].from = ["thread_ts"]
-    assert.match(problemsOf(slack).join("\n"), /thread_ts input must come with its thread_channel/)
-    const outside = exampleSources("slack")
-    outside.items[0].details[0].within = "labels"
-    assert.match(problemsOf(outside).join("\n"), /"labels" is not one of the source's scope keys/)
+  test("takes a detail read's input only from the event's identifying fields, never its text", () => {
     const text = exampleSources("slack")
     text.items[0].details[0].from = ["text"]
-    assert.ok(problemsOf(text).length > 0)
+    assert.match(problemsOf(text).join("\n"), /details\[0\]\.from/)
+    const title = exampleSources("slack")
+    title.items[0].details[0].from = ["thread", "title"]
+    assert.ok(problemsOf(title).length > 0)
+    assert.deepEqual(problemsOf(exampleSources("slack")), [])
+  })
+
+  test("needs a cost on every source", () => {
+    assert.match(problemsOf(withItem((item) => delete item.cost)).join("\n"), /cost/)
   })
 
   test("refuses a repeated id, an unknown contract version, and a wrong id", () => {

@@ -21,7 +21,7 @@ The draft's ten checks, and Memory's additions:
 | 9 | Calls stay within the declared cost. | the kit |
 | 10 | Every result is marked `trust: "untrusted"`. | `read`, the kit |
 | + | **The read-verb allowlist.** A read's name and each operation's last segment contain no write verb and no joiner (`get_and_save`); an operation's last segment starts with a read verb; `fetch` and `export` are never reads. | Memory's `conformance` |
-| + | `details` are called only with in-scope event fields. | `read.detailInput`, Memory's `conformance` |
+| + | `details` are called only with in-scope event fields. | `read.detailFields`, Memory's `conformance` |
 | + | `urlHosts` are exact hosts or `*.` with a registrable domain: no public suffix, shared hosting or punycode. | Memory's `schema` |
 
 ## Running it

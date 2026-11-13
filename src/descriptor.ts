@@ -31,26 +31,20 @@ export interface SourcePermission {
   readonly events?: string
   /** A snapshot source's method action, such as `gws.calendar_today`. */
   readonly tool?: string
-  /** What the read does at the provider: what grants and a person's off switches key on. */
-  readonly operations: readonly string[]
   /**
-   * The action each operation is asserted under, on the resource `<account>:<operation>`, such as `gws.read`. Without
-   * it, each operation is itself an action, asserted on `*` (an MCP tool such as `slack_slack_read_channel`).
+   * What the read does at the provider: what grants and a person's off switches key on. A dotted operation
+   * (`gmail.users.messages.get`) is asserted as `<namespace>.read` on `<account>:<operation>`; a bare one
+   * (`slack_read_channel`) is an MCP tool, asserted as `<namespace>_<operation>` on `*` (`permission.operationRule`).
    */
-  readonly operationAction?: string
-  /** The source's `probe`: its action and the operations it asserts, which must read no content. */
-  readonly probe?: { readonly action: string; readonly operations?: readonly string[] }
+  readonly operations: readonly string[]
 }
 
-/** A detail read: a declared read per event, whose inputs come only from the event's API fields. */
+/** A detail read: a declared read per event, whose inputs come only from the event's own fields, never its text. */
 export interface SourceDetail {
   readonly id: string
   readonly tool: string
-  /** The event fields its inputs come from: `external_id`, `thread`, `thread_channel` or `thread_ts`. */
+  /** The event fields its input is: `external_id`, `thread`, and the others Memory's schema lists. */
   readonly from: readonly string[]
-  /** The scope key the unit must sit in, such as `channels`: a detail never reads outside the confirmed scope. */
-  readonly within?: string
-  readonly permission?: { readonly tool: string; readonly operations?: readonly string[]; readonly operationAction?: string }
 }
 
 /** One source a plugin declares. */
@@ -67,11 +61,16 @@ export interface SourceItem {
   readonly output?: string
   readonly params?: Readonly<Record<string, ParamSpec>>
   readonly accounts?: { readonly named?: boolean }
-  readonly scope?: { readonly keys: readonly string[]; readonly describe?: string; readonly suggest?: Readonly<Record<string, unknown>> }
+  readonly scope?: {
+    readonly keys: readonly string[]
+    readonly describe?: string
+    /** The read-only tool that lists choices at consent, and the operations it asserts; run only at bind. */
+    readonly suggest?: { readonly tool: string; readonly operations: readonly string[] }
+  }
   readonly details?: readonly SourceDetail[]
   readonly permission: SourcePermission
   readonly private?: boolean
-  readonly cost?: {
+  readonly cost: {
     readonly class: "free" | "metered" | "billed"
     readonly units?: readonly { readonly per: string; readonly usd: number }[]
     readonly probe?: { readonly per: string; readonly usd: number }
@@ -106,7 +105,8 @@ const SOURCE_ID = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/
 const METHOD = /^[A-Za-z0-9_.-]{1,100}$/
 const ACTION = /^[A-Za-z0-9_.-]{1,200}$/
 const OPERATION = /^[A-Za-z0-9_.-]{1,200}$/
-const DETAIL_FIELDS = ["external_id", "thread", "thread_channel", "thread_ts"]
+/** The event fields a detail read may take its input from (Memory's schema): identifiers and metadata, never `title` or `text`. */
+export const DETAIL_FIELDS = ["external_id", "kind", "occurred_at", "url", "thread", "actors", "labels", "hash"] as const
 
 const action = z.string().regex(ACTION, "must be a permission action, such as gws.events_list")
 const operation = z.string().regex(OPERATION, "must be an operation name of letters, digits, dots, underscores or hyphens")
@@ -131,8 +131,6 @@ const item = z
           id: z.string().regex(SOURCE_ID),
           tool: z.string().regex(METHOD),
           from: z.array(z.enum(DETAIL_FIELDS)).min(1),
-          within: z.string().optional(),
-          permission: z.looseObject({ tool: action, operations: z.array(operation).optional(), operationAction: action.optional() }).optional(),
         }),
       )
       .optional(),
@@ -140,11 +138,9 @@ const item = z
       events: action.optional(),
       tool: action.optional(),
       operations: z.array(operation).min(1, "must name at least one operation: grants and off switches key on them"),
-      operationAction: action.optional(),
-      probe: z.looseObject({ action, operations: z.array(operation).optional() }).optional(),
     }),
     private: z.boolean().optional(),
-    cost: z.looseObject({ class: z.enum(["free", "metered", "billed"]), units: z.array(price).optional(), probe: price.optional() }).optional(),
+    cost: z.looseObject({ class: z.enum(["free", "metered", "billed"]), units: z.array(price).optional(), probe: price.optional() }),
     cadence: z.looseObject({ providerMinMinutes: z.number().int().positive().optional() }).optional(),
     maxBytes: z.number().int().positive().max(MAX_BYTES_LIMIT, `must be at most ${MAX_BYTES_LIMIT} (1 MB)`).optional(),
     maxAgeSec: z.number().int().positive().optional(),
@@ -166,16 +162,6 @@ const item = z
     if (source.permission.events !== undefined && source.permission.tool !== undefined) problem(["permission"], "name one method action: events or tool, not both")
     if (source.cost?.class === "billed" && (source.cost.units === undefined || source.cost.units.length === 0)) {
       problem(["cost", "units"], "a billed source must state its price units")
-    }
-    const keys = source.scope?.keys ?? []
-    for (const [index, detail] of (source.details ?? []).entries()) {
-      if (detail.from.includes("thread_ts") && !detail.from.includes("thread_channel")) {
-        problem(["details", index, "from"], "a thread_ts input must come with its thread_channel, so the thread stays in the confirmed scope")
-      }
-      if (detail.within !== undefined && !keys.includes(detail.within)) problem(["details", index, "within"], `"${detail.within}" is not one of the source's scope keys`)
-      if (detail.from.includes("thread_channel") && detail.within === undefined) {
-        problem(["details", index, "within"], "a detail read that takes a channel must say which scope key holds the confirmed channels")
-      }
     }
   })
 

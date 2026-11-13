@@ -11,8 +11,10 @@
  *
  * The method's action is allowed on `*`, because the tools RPC resolves a method before dispatch on `*` (version 2; a
  * method with a version 2.3 resource resolver is resolved on its resource, which the operation rules cover). Each
- * operation is allowed on `<account>:<operation>` under the source's `operationAction`, or, without one, is itself an
- * action allowed on `*` (an MCP tool such as `slack_slack_read_channel`).
+ * operation is allowed as Memory's schema and conformance kit read it (`operationRule`): a dotted operation as
+ * `<namespace>.read` on `<account>:<operation>` (gws: `gws.read` on `ana@example.com:gmail.users.messages.get`), and a
+ * bare one, an MCP tool, as `<namespace>_<operation>` on `*` (Slack: `slack_slack_read_channel`). The namespace is the
+ * source id's first segment.
  *
  * The broker and a project may only narrow these rules, and the plugin's own `access` setting stays final.
  */
@@ -67,12 +69,19 @@ export function accountProblem(account: unknown): string | undefined {
 
 const allow = (action: string, resource: string): PermissionRule => ({ action, resource, effect: "allow" })
 
-function operationRules(
-  operations: readonly string[],
-  operationAction: string | undefined,
-  account: string,
-): PermissionRule[] {
-  return operations.map((operation) => (operationAction === undefined ? allow(operation, "*") : allow(operationAction, `${account}:${operation}`)))
+/** A source's namespace: its id's first segment, which every action of the source begins with. */
+export function namespaceOf(source: Pick<SourceItem, "id">): string {
+  return source.id.split(".")[0] ?? source.id
+}
+
+/**
+ * The rule that allows one operation for `account`: a dotted operation as `<namespace>.read` on
+ * `<account>:<operation>`, a bare one (an MCP tool) as `<namespace>_<operation>` on `*`. The same derivation as Memory's
+ * conformance kit, so declared equals asserted means the same thing in a plugin's CI and in a consumer's session.
+ */
+export function operationRule(source: Pick<SourceItem, "id">, operation: string, account: string): PermissionRule {
+  const namespace = namespaceOf(source)
+  return operation.includes(".") ? allow(`${namespace}.read`, `${account}:${operation}`) : allow(`${namespace}_${operation}`, "*")
 }
 
 function fenced(rules: readonly PermissionRule[]): Checked<readonly PermissionRule[]> {
@@ -104,33 +113,32 @@ export function sessionRules(source: SourceItem, grant: Pick<Grant, "source" | "
   if (problem) return { ok: false, problems: [problem] }
   const method = methodAction(source)
   if (method === undefined) return { ok: false, problems: [`${source.id} names no action for its method`] }
-  return fenced([allow(method, "*"), ...operationRules(source.permission.operations, source.permission.operationAction, grant.account)])
+  return fenced([allow(method, "*"), ...source.permission.operations.map((operation) => operationRule(source, operation, grant.account))])
 }
 
 /**
- * The session rules for one detail read of `source` under `grant`: deny everything, then allow the detail's own action
- * and operations. Refused when the detail declares no permission.
+ * The session rules for one detail read of `source` under `grant`: the source's own rules. A detail read is part of
+ * the source's read (Slack's thread read is one of its declared operations), so it asserts nothing the source does not
+ * declare. Refused when the source declares no such detail.
  */
 export function detailRules(source: SourceItem, detailId: string, grant: Pick<Grant, "source" | "account">): Checked<readonly PermissionRule[]> {
-  if (grant.source !== source.id) return { ok: false, problems: [`the grant is for ${grant.source}, not ${source.id}`] }
-  const detail = source.details?.find((entry) => entry.id === detailId)
-  if (!detail) return { ok: false, problems: [`${source.id} declares no detail read ${detailId}`] }
-  if (!detail.permission) return { ok: false, problems: [`the detail read ${detailId} declares no permission, so it cannot be granted`] }
-  const problem = accountProblem(grant.account)
-  if (problem) return { ok: false, problems: [problem] }
-  return fenced([allow(detail.permission.tool, "*"), ...operationRules(detail.permission.operations ?? [], detail.permission.operationAction, grant.account)])
+  if (!source.details?.some((entry) => entry.id === detailId)) return { ok: false, problems: [`${source.id} declares no detail read ${detailId}`] }
+  return sessionRules(source, grant)
 }
 
 /**
- * The session rules for the source's `probe` on `account`: deny everything, then allow the probe's action and its
- * operations, which read no content. Refused when the source declares no probe permission.
+ * The session rules for the source's `probe` on `account`: deny everything, then allow the source's own action and its
+ * identity operations, which read no content and are never among its content operations (Memory's kit checks both).
+ * The descriptor does not list identity operations yet, so the caller passes them (source-contract#4).
  */
-export function probeRules(source: SourceItem, account: string): Checked<readonly PermissionRule[]> {
-  const probe = source.permission.probe
-  if (!probe) return { ok: false, problems: [`${source.id} declares no probe permission`] }
+export function probeRules(source: SourceItem, account: string, identityOperations: readonly string[]): Checked<readonly PermissionRule[]> {
   const problem = accountProblem(account)
   if (problem) return { ok: false, problems: [problem] }
-  return fenced([allow(probe.action, "*"), ...operationRules(probe.operations ?? [], source.permission.operationAction, account)])
+  const method = methodAction(source)
+  if (method === undefined) return { ok: false, problems: [`${source.id} names no action for its method`] }
+  const content = identityOperations.filter((operation) => source.permission.operations.includes(operation))
+  if (content.length > 0) return { ok: false, problems: [`${content.join(", ")} is a content operation of ${source.id}, so a probe may not assert it`] }
+  return fenced([allow(method, "*"), ...identityOperations.map((operation) => operationRule(source, operation, account))])
 }
 
 /**

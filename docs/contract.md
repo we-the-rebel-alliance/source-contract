@@ -71,7 +71,7 @@ One top-level `sources` key in the plugin's `package.json`, read from the **inst
       "accounts": { "named": true },
       "scope": { "keys": ["labels"], "describe": "Which labels" },
       "details": [{ "id": "gws.gmail.message", "tool": "read", "from": ["external_id"] }],
-      "permission": { "events": "gws.events_list", "operationAction": "gws.read",
+      "permission": { "events": "gws.events_list",
         "operations": ["gmail.users.history.list", "gmail.users.messages.list", "gmail.users.messages.get"] },
       "private": true, "cost": { "class": "free" }, "maxBytes": 262144, "retentionDays": 30
     },
@@ -79,7 +79,7 @@ One top-level `sources` key in the plugin's `package.json`, read from the **inst
       "id": "gws.calendar.today", "kind": "snapshot", "tool": "calendar_today",
       "output": "agenda", "params": { "window": { "relative": true } },
       "accounts": { "named": true },
-      "permission": { "tool": "gws.calendar_today", "operationAction": "gws.read", "operations": ["calendar.events.list"] },
+      "permission": { "tool": "gws.calendar_today", "operations": ["calendar.events.list"] },
       "private": true, "cost": { "class": "free" }, "maxAgeSec": 900, "maxBytes": 65536
     }
   ]
@@ -89,18 +89,18 @@ One top-level `sources` key in the plugin's `package.json`, read from the **inst
 The rules:
 
 - every tool a source names is a read (`readOnly`, class `read`);
-- `permission.operations` is **required**: grants and a person's off switches key on it;
+- `permission.operations` is **required**: grants and a person's off switches key on it. A dotted operation (`gmail.users.messages.get`) is asserted as `<namespace>.read` on `<account>:<operation>`, and a bare one, an MCP tool (`slack_read_channel`), as `<namespace>_<operation>` on `*`; the namespace is the source id's first segment, and every action of the source begins with it;
 - `scope.keys` are what a person confirms (labels, channels, repositories);
-- each `details` entry takes its inputs only from an event's API fields (`external_id`, `thread` and its channel and timestamp), pinned to the confirmed scope, never from item text;
+- each `details` entry names the event fields its input is (`external_id`, `thread` and the other identifiers), never `title` or `text`; it is called with `{ account, scope, fields }` under the source's own rules, and the plugin refuses an event outside the confirmed scope;
 - `private: true` is shown at consent;
 - `cost` states price units, including `probe`'s; a billed source must state them;
 - `cadence.providerMinMinutes` only where the provider imposes a minimum;
 - `maxBytes` defaults to 64 KB and may go up to 1 MB;
 - a snapshot's `output` names a registered schema;
 - optional `urlHosts`: the hosts a source's `url` may point at, for display (Memory's rules);
-- optional `scope.suggest`: a read-only tool that lists choices at consent, run only at bind and never stored.
+- optional `scope.suggest`: `{ tool, operations }`, a read-only tool that lists choices at consent, run only at bind in its own session, and never stored.
 
-`readInstalledDescriptor` reads, validates and hashes it (`sha256:` of canonical JSON). A grant stores the hash; a changed descriptor asks the person again. Points the schema is still settling (`operationAction`, a detail's permission, `probe`'s permission): [issue #4](https://github.com/we-the-rebel-alliance/source-contract/issues/4).
+`readInstalledDescriptor` reads, validates and hashes it (`sha256:` of canonical JSON). A grant stores the hash; a changed descriptor asks the person again. `probe`'s identity operations are not in the descriptor yet, so a consumer passes them to `probe` ([issue #4](https://github.com/we-the-rebel-alliance/source-contract/issues/4)).
 
 ## L2: the protocol
 
@@ -121,7 +121,7 @@ The rules:
 
 ## The trust rule
 
-The descriptor comes from the installed package, its version checked against the install, and **every read runs in a session limited to exact allow rules from the grant** (`permission.sessionRules`): a deny of everything, then the method's action and each operation, on `<account>:<operation>` or as an action. OpenCode checks each inner tool call against the calling session's rules, and the last matching rule wins, so the session is a real sandbox whatever the agent allows. A broker or a project may only narrow these rules, and the plugin's own `access` setting stays final.
+The descriptor comes from the installed package, its version checked against the install, and **every read runs in a session limited to exact allow rules from the grant** (`permission.sessionRules`): a deny of everything, then the method's action and each operation's rule. OpenCode checks each inner tool call against the calling session's rules, and the last matching rule wins, so the session is a real sandbox whatever the agent allows. A broker or a project may only narrow these rules, and the plugin's own `access` setting stays final.
 
 `read` refuses before any call when the grant is another consumer's, the source is off, the descriptor changed since consent or the scope is wider than granted; it then checks the answer's account, its `trust` marker, its size and, for a snapshot, its output. Grants are per consumer, source, account and scope. A cached answer serves only a consumer whose own grant covers the same source, account and scope, never another person or viewer.
 

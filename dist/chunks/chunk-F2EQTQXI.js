@@ -11,8 +11,12 @@ function accountProblem(account) {
   return void 0;
 }
 var allow = (action, resource) => ({ action, resource, effect: "allow" });
-function operationRules(operations, operationAction, account) {
-  return operations.map((operation) => operationAction === void 0 ? allow(operation, "*") : allow(operationAction, `${account}:${operation}`));
+function namespaceOf(source) {
+  return source.id.split(".")[0] ?? source.id;
+}
+function operationRule(source, operation, account) {
+  const namespace = namespaceOf(source);
+  return operation.includes(".") ? allow(`${namespace}.read`, `${account}:${operation}`) : allow(`${namespace}_${operation}`, "*");
 }
 function fenced(rules) {
   const loose = rules.find((rule) => WILDCARD.test(rule.action) || rule.resource !== "*" && WILDCARD.test(rule.resource));
@@ -35,23 +39,20 @@ function sessionRules(source, grant) {
   if (problem) return { ok: false, problems: [problem] };
   const method = methodAction(source);
   if (method === void 0) return { ok: false, problems: [`${source.id} names no action for its method`] };
-  return fenced([allow(method, "*"), ...operationRules(source.permission.operations, source.permission.operationAction, grant.account)]);
+  return fenced([allow(method, "*"), ...source.permission.operations.map((operation) => operationRule(source, operation, grant.account))]);
 }
 function detailRules(source, detailId, grant) {
-  if (grant.source !== source.id) return { ok: false, problems: [`the grant is for ${grant.source}, not ${source.id}`] };
-  const detail = source.details?.find((entry) => entry.id === detailId);
-  if (!detail) return { ok: false, problems: [`${source.id} declares no detail read ${detailId}`] };
-  if (!detail.permission) return { ok: false, problems: [`the detail read ${detailId} declares no permission, so it cannot be granted`] };
-  const problem = accountProblem(grant.account);
-  if (problem) return { ok: false, problems: [problem] };
-  return fenced([allow(detail.permission.tool, "*"), ...operationRules(detail.permission.operations ?? [], detail.permission.operationAction, grant.account)]);
+  if (!source.details?.some((entry) => entry.id === detailId)) return { ok: false, problems: [`${source.id} declares no detail read ${detailId}`] };
+  return sessionRules(source, grant);
 }
-function probeRules(source, account) {
-  const probe = source.permission.probe;
-  if (!probe) return { ok: false, problems: [`${source.id} declares no probe permission`] };
+function probeRules(source, account, identityOperations) {
   const problem = accountProblem(account);
   if (problem) return { ok: false, problems: [problem] };
-  return fenced([allow(probe.action, "*"), ...operationRules(probe.operations ?? [], source.permission.operationAction, account)]);
+  const method = methodAction(source);
+  if (method === void 0) return { ok: false, problems: [`${source.id} names no action for its method`] };
+  const content = identityOperations.filter((operation) => source.permission.operations.includes(operation));
+  if (content.length > 0) return { ok: false, problems: [`${content.join(", ")} is a content operation of ${source.id}, so a probe may not assert it`] };
+  return fenced([allow(method, "*"), ...identityOperations.map((operation) => operationRule(source, operation, account))]);
 }
 function evaluate(rules, action, resource = "*") {
   return rules.findLast((rule) => wildcard(rule.action, action) && wildcard(rule.resource, resource))?.effect ?? "ask";
@@ -70,6 +71,8 @@ export {
   DENY_ALL,
   ACCOUNT_PATTERN,
   accountProblem,
+  namespaceOf,
+  operationRule,
   methodAction,
   sessionRules,
   detailRules,

@@ -2,7 +2,7 @@
 import {
   findSource,
   maxBytesOf
-} from "./chunk-RXI6NHF6.js";
+} from "./chunk-6QBO75FX.js";
 import {
   ERROR_CODES,
   PAGE,
@@ -22,7 +22,7 @@ import {
   grantCovers,
   probeRules,
   sessionRules
-} from "./chunk-36GA4GB4.js";
+} from "./chunk-F2EQTQXI.js";
 import {
   pick,
   pickProblemsForOutput
@@ -173,29 +173,16 @@ function acceptAnswer(source, account, answer, options = {}) {
     snapshot: { data: picked, asOf: value["asOf"], ...value["cost"] === void 0 ? {} : { cost: value["cost"] }, trust: "untrusted" }
   };
 }
-var THREAD = /^[a-z][a-z0-9+.-]*-thread:([^:\s]+):([^:\s]+)$/;
-function detailInput(source, detailId, event, grant) {
+function detailFields(source, detailId, event) {
   const detail = source.details?.find((entry) => entry.id === detailId);
   if (!detail) return { ok: false, problems: [`${source.id} declares no detail read ${detailId}`] };
-  const thread = typeof event["thread"] === "string" ? THREAD.exec(event["thread"]) : null;
-  const fields = {
-    external_id: typeof event["external_id"] === "string" ? event["external_id"] : void 0,
-    thread: typeof event["thread"] === "string" ? event["thread"] : void 0,
-    thread_channel: thread?.[1],
-    thread_ts: thread?.[2]
-  };
-  const input = {};
+  const fields = {};
   const problems = [];
   for (const field of detail.from) {
-    const value = fields[field];
-    if (value === void 0) problems.push(`the event has no ${field} for ${detailId}`);
-    else input[field] = value;
+    if (event[field] === void 0 || event[field] === null) problems.push(`the event has no ${field} for ${detailId}`);
+    else fields[field] = event[field];
   }
-  if (input["thread_channel"] !== void 0) {
-    const confirmed = detail.within === void 0 ? void 0 : grant.scope?.[detail.within];
-    if (!confirmed?.includes(input["thread_channel"])) problems.push(`the event's channel is not in the confirmed ${detail.within ?? "scope"}`);
-  }
-  return problems.length === 0 ? { ok: true, value: input } : { ok: false, problems };
+  return problems.length === 0 ? { ok: true, value: fields } : { ok: false, problems };
 }
 async function readDetail(host, request) {
   const { installed, grant } = request;
@@ -208,13 +195,14 @@ async function readDetail(host, request) {
   if (request.event["account"] !== void 0 && request.event["account"] !== grant.account) {
     return { ok: false, failure: failure("ACCOUNT_MISMATCH", "the event is another account's", "Read details only for events of the granted account.") };
   }
-  const input = detailInput(source, request.detail, request.event, grant);
-  if (!input.ok) return { ok: false, failure: failure("PERMISSION_DENIED", input.problems.join("; "), "Read details only for events of the confirmed scope.") };
+  const fields = detailFields(source, request.detail, request.event);
+  if (!fields.ok) return { ok: false, failure: failure("SCHEMA_VIOLATION", fields.problems.join("; "), "Read details only for events the source listed.") };
   const detail = source.details.find((entry) => entry.id === request.detail);
+  const scope = grant.scope === void 0 ? {} : canonicalScope(grant.scope);
   const called = await fencedCall(
     host,
     detailRules(source, request.detail, grant),
-    { package: installed.package, method: detail.tool, input: { ...input.value, account: grant.account }, ...request.signal ? { signal: request.signal } : {} },
+    { package: installed.package, method: detail.tool, input: { account: grant.account, scope, fields: fields.value }, ...request.signal ? { signal: request.signal } : {} },
     `${request.consumer} reads ${request.detail}`
   );
   if (!called.ok) return called;
@@ -226,7 +214,7 @@ async function probe(host, request) {
   if (!source) return { ok: false, failure: failure("UNAVAILABLE", `${request.installed.package} declares no source ${request.source}`, "Check the source id.") };
   const called = await fencedCall(
     host,
-    probeRules(source, request.account),
+    probeRules(source, request.account, request.identityOperations),
     { package: request.installed.package, method: "probe", input: { ...source.input ?? {}, account: request.account }, ...request.signal ? { signal: request.signal } : {} },
     `probe ${source.id}`
   );
@@ -244,7 +232,7 @@ export {
   checkReadRequest,
   read,
   acceptAnswer,
-  detailInput,
+  detailFields,
   readDetail,
   probe
 };

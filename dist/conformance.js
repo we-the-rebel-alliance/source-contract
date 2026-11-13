@@ -10917,7 +10917,7 @@ function syntheticEvent(source) {
     thread: "conformance-thread:1",
     actors: [{ id: "conformance:1", label: "Conformance" }],
     labels: ["conformance"],
-    hash: `sha256:${"0".repeat(64)}`
+    hash: "conformance-placeholder"
   };
 }
 function detailInput(detail, source, options) {

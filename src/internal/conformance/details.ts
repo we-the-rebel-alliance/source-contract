@@ -34,7 +34,7 @@ export function syntheticEvent(source: SourceItem): Record<string, unknown> {
     thread: "conformance-thread:1",
     actors: [{ id: "conformance:1", label: "Conformance" }],
     labels: ["conformance"],
-    hash: `sha256:${"0".repeat(64)}`,
+    hash: "conformance-placeholder",
   }
 }
 

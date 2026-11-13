@@ -11,6 +11,9 @@ import {
   resultProblems
 } from "./chunk-ZTRH3FEM.js";
 import {
+  canonicalScope
+} from "./chunk-I2RXJJJM.js";
+import {
   resolveParams,
   resolveSince
 } from "./chunk-RYNKNCPP.js";
@@ -67,10 +70,11 @@ function checkReadRequest(request) {
   if (grant.descriptorHash !== installed.hash) {
     return refused("PERMISSION_DENIED", `${source.id}'s declaration changed since the person consented`, "Ask the person to review the source and consent again.");
   }
-  const scope = request.scope ?? grant.scope;
-  if (!grantCovers(grant, { source: source.id, account: grant.account, ...scope === void 0 ? {} : { scope } })) {
+  const asked = request.scope ?? grant.scope;
+  if (!grantCovers(grant, { source: source.id, account: grant.account, ...asked === void 0 ? {} : { scope: asked } })) {
     return refused("PERMISSION_DENIED", `the read asks for more of ${source.id} than the person granted`, "Read within the granted scope, or ask the person to widen it.");
   }
+  const scope = asked === void 0 ? void 0 : canonicalScope(asked);
   if (source.kind === "events") {
     if (request.params !== void 0 || request.pick !== void 0) return refused("SCHEMA_VIOLATION", "params and pick are for a snapshot source", "Pass cursor, since and limit to an events source.");
   } else {

@@ -150,6 +150,13 @@ describe("read events", () => {
     assert.equal(fake.calls[0]!.method, "events_list")
   })
 
+  test("sends the scope in one canonical form, so a cursor's binding and a cache key agree", async () => {
+    const fake = fakeHost(() => page)
+    const grant = { ...grantFor("gws.gmail"), consumer: "memory", scope: { labels: ["SENT", "INBOX", "INBOX"], folders: ["b", "a"] } }
+    await read(fake.host, { installed: gws, source: "gws.gmail", consumer: "memory", grant, context })
+    assert.equal(JSON.stringify(fake.calls[0]!.input["scope"]), JSON.stringify({ folders: ["a", "b"], labels: ["INBOX", "SENT"] }))
+  })
+
   test("refuses a scope wider than the grant, and params on an events source", async () => {
     const fake = fakeHost(() => page)
     const grant = { ...grantFor("gws.gmail"), consumer: "memory", scope: { labels: ["INBOX"] } }

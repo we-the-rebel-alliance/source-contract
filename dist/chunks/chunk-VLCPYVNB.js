@@ -45,10 +45,10 @@ function detailRules(source, detailId, grant) {
   if (!source.details?.some((entry) => entry.id === detailId)) return { ok: false, problems: [`${source.id} declares no detail read ${detailId}`] };
   return sessionRules(source, grant);
 }
-function probeRules(source, account, identityOperations) {
+function probeRules(source, account, identityOperations, probeAction) {
   const problem = accountProblem(account);
   if (problem) return { ok: false, problems: [problem] };
-  const method = methodAction(source);
+  const method = probeAction ?? methodAction(source);
   if (method === void 0) return { ok: false, problems: [`${source.id} names no action for its method`] };
   const content = identityOperations.filter((operation) => source.permission.operations.includes(operation));
   if (content.length > 0) return { ok: false, problems: [`${content.join(", ")} is a content operation of ${source.id}, so a probe may not assert it`] };

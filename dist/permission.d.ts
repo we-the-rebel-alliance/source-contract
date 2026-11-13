@@ -76,11 +76,11 @@ export declare function sessionRules(source: SourceItem, grant: Pick<Grant, "sou
  */
 export declare function detailRules(source: SourceItem, detailId: string, grant: Pick<Grant, "source" | "account">): Checked<readonly PermissionRule[]>;
 /**
- * The session rules for the source's `probe` on `account`: deny everything, then allow the source's own action and its
- * identity operations, which read no content and are never among its content operations (Memory's kit checks both).
- * The descriptor does not list identity operations yet, so the caller passes them (source-contract#4).
+ * The session rules for the source's `probe` on `account`: deny everything, then allow the probe's action (the
+ * plugin's declared `sources.probe.action`, or else the source's own action) and its identity operations, which read
+ * no content and are never among its content operations (Memory's kit checks both).
  */
-export declare function probeRules(source: SourceItem, account: string, identityOperations: readonly string[]): Checked<readonly PermissionRule[]>;
+export declare function probeRules(source: SourceItem, account: string, identityOperations: readonly string[], probeAction?: string): Checked<readonly PermissionRule[]>;
 /**
  * How OpenCode decides an action on a resource under `rules`: the last rule whose action and resource match wins (`*`
  * matches any run of characters and `?` one), and no match asks. The same evaluation the tools RPC runs.

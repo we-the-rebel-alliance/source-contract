@@ -127,14 +127,14 @@ export function detailRules(source: SourceItem, detailId: string, grant: Pick<Gr
 }
 
 /**
- * The session rules for the source's `probe` on `account`: deny everything, then allow the source's own action and its
- * identity operations, which read no content and are never among its content operations (Memory's kit checks both).
- * The descriptor does not list identity operations yet, so the caller passes them (source-contract#4).
+ * The session rules for the source's `probe` on `account`: deny everything, then allow the probe's action (the
+ * plugin's declared `sources.probe.action`, or else the source's own action) and its identity operations, which read
+ * no content and are never among its content operations (Memory's kit checks both).
  */
-export function probeRules(source: SourceItem, account: string, identityOperations: readonly string[]): Checked<readonly PermissionRule[]> {
+export function probeRules(source: SourceItem, account: string, identityOperations: readonly string[], probeAction?: string): Checked<readonly PermissionRule[]> {
   const problem = accountProblem(account)
   if (problem) return { ok: false, problems: [problem] }
-  const method = methodAction(source)
+  const method = probeAction ?? methodAction(source)
   if (method === undefined) return { ok: false, problems: [`${source.id} names no action for its method`] }
   const content = identityOperations.filter((operation) => source.permission.operations.includes(operation))
   if (content.length > 0) return { ok: false, problems: [`${content.join(", ")} is a content operation of ${source.id}, so a probe may not assert it`] }

@@ -32,6 +32,10 @@ is written and again by the runner. It finds nothing in these files:
 - no URL host outside the fakes' own: `github.com`, `linear.app`, `x.com`, `acme.slack.com`, `notes.example.test`,
   `mail.google.com` and `notes.wisprflow.ai`, each with synthetic paths.
 
+X's handles carry a `fixture-` prefix (`@fixture-samrivera`), and its status ids are `9000…0001` upwards, in the
+recorded order. They were rewritten after recording, inside the cursors too, with each event's hash recomputed.
+The runner checks both.
+
 The cursors are each plugin's version 1 cursors. Their owner field `o` is a hash of the fake's owner, not an id.
 
 ## Recording them again

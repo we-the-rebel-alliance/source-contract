@@ -73,6 +73,12 @@ describe("the fixtures", () => {
     }
   })
 
+  test("use only fixture handles and obviously fake ids for X", () => {
+    const text = JSON.stringify(FIXTURES.get("x")!.runs)
+    for (const handle of text.match(/@[A-Za-z0-9_-]+/g) ?? []) expect(handle, handle).toMatch(/^@fixture-/)
+    for (const id of text.match(/\b\d{19}\b/g) ?? []) expect(id, id).toMatch(/^90{6}/)
+  })
+
   test("hold no event the secret-pattern refusal would refuse", () => {
     for (const [name, fixture] of FIXTURES) expect(screenEvents(events(fixture)).refused, name).toEqual([])
   })

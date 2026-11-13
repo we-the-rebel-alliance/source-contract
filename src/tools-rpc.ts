@@ -2,7 +2,7 @@
  * The tools RPC, version 2.3: every known tool a plugin owns or exposes, as an RPC method, so a script can call it
  * with no model. The family's shared `src/host/tools-rpc.ts` v2 (the part outside the PLUGIN-SPECIFIC block, identical
  * in all 24 plugins; SHA-256 of that part 15d82caa…2a6d), with Memory's v2.3 per-method resource resolver merged in.
- * `DIFF.md` explains every change from v2 and from Memory's version.
+ * `docs/tools-rpc.md` explains every change from v2 and from Memory's version.
  *
  *   POST /api/rpc/<plugin id>.tools/<method>
  *   { "input": { "sessionID": "<session>", "input": <the tool's input> } }

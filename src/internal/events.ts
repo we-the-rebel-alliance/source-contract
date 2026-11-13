@@ -8,7 +8,7 @@
  * This is contract 1, the family's `src/host/events-list.ts` (identical in github, granola, gws, history, linear,
  * plaud, slack, wisprflow and x; SHA-256 9d72fc8d…605e), extracted as a module, with the final design's page result
  * added **additively**: every field and kind contract 1 defines keeps its meaning, every contract 1 page is a valid
- * page here, and each addition is optional. `CHANGES.md` maps each addition to the design and lists what still needs
+ * page here, and each addition is optional. `docs/events.md` maps each addition to the design and lists what still needs
  * a decision.
  *
  * A source plugin adds one read-only tool and tools-RPC method named `events_list`. It never writes, never asks and
@@ -244,7 +244,7 @@ export type ErrorCode = (typeof ERROR_CODES)[number]
 
 /**
  * Codes the nine plugins use today for refusals the table has no row for: a malformed input and a source the plugin
- * does not have. Proposed for the table (CHANGES.md, decision D3); until decided, `canonicalCode` accepts them.
+ * does not have. Proposed for the table (`docs/events.md`, decision D3); until decided, `canonicalCode` accepts them.
  */
 export const PROPOSED_CODES = ["INPUT_INVALID", "SOURCE_UNKNOWN"] as const
 export type ProposedCode = (typeof PROPOSED_CODES)[number]
@@ -521,7 +521,7 @@ export function fitPage(events: readonly SourceEvent[], limit: number, maxBytes:
 export interface ScreenOptions {
   /** False when the event is not the signed-in owner's (a shared mailbox, a delegated calendar). */
   readonly ownedBy?: (event: SourceEvent) => boolean
-  /** True when the event is instruction-shaped text from someone else. The library has no default (CHANGES.md, D5). */
+  /** True when the event is instruction-shaped text from someone else. The library has no default (`docs/events.md`, D5). */
   readonly instruction?: (event: SourceEvent) => boolean
   /** The secret detector; Memory's `secretKinds` by default. */
   readonly secrets?: (text: string) => readonly string[]

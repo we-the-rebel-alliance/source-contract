@@ -118,6 +118,8 @@ const item = z
     kind: z.enum(["events", "snapshot"]),
     tool: z.string().regex(METHOD, "must be a tools-RPC method name"),
     input: z.record(z.string(), z.unknown()).optional(),
+    // PROVISIONAL (app#2346 decisions D13 and D15, PR #7): one event kind, core or x-<plugin>/<kind>. Whether `reads`
+    // takes a list, and whether an extension's <plugin> must match the descriptor's, are not agreed yet.
     reads: z.string().refine(isEventKind, `must be an event kind: ${EVENT_KINDS.join(", ")}, or x-<plugin>/<kind>`).optional(),
     output: z.string().optional(),
     params: z.record(z.string(), z.looseObject({ relative: z.boolean().optional(), me: z.boolean().optional() })).optional(),

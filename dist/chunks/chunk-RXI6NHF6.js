@@ -3,6 +3,11 @@ import {
   SUPPORTED_CONTRACT_VERSIONS
 } from "./chunk-ELPJD3ND.js";
 import {
+  EVENT_KINDS,
+  MAX_BYTES,
+  isEventKind
+} from "./chunk-ZTRH3FEM.js";
+import {
   OUTPUT_NAMES,
   _enum,
   array,
@@ -21,8 +26,8 @@ import {
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-var MAX_BYTES_LIMIT = 1024 * 1024;
-var DEFAULT_MAX_BYTES = 64 * 1024;
+var MAX_BYTES_LIMIT = MAX_BYTES.max;
+var DEFAULT_MAX_BYTES = MAX_BYTES.default;
 var SOURCE_ID = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/;
 var METHOD = /^[A-Za-z0-9_.-]{1,100}$/;
 var ACTION = /^[A-Za-z0-9_.-]{1,200}$/;
@@ -36,7 +41,9 @@ var item = looseObject({
   kind: _enum(["events", "snapshot"]),
   tool: string().regex(METHOD, "must be a tools-RPC method name"),
   input: record(string(), unknown()).optional(),
-  reads: string().min(1).optional(),
+  // PROVISIONAL (app#2346 decisions D13 and D15, PR #7): one event kind, core or x-<plugin>/<kind>. Whether `reads`
+  // takes a list, and whether an extension's <plugin> must match the descriptor's, are not agreed yet.
+  reads: string().refine(isEventKind, `must be an event kind: ${EVENT_KINDS.join(", ")}, or x-<plugin>/<kind>`).optional(),
   output: string().optional(),
   params: record(string(), looseObject({ relative: boolean().optional(), me: boolean().optional() })).optional(),
   accounts: looseObject({ named: boolean().optional() }).optional(),

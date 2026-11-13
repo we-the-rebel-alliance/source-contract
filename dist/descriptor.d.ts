@@ -1,6 +1,6 @@
 import type { Checked } from "./internal/checked.js";
 import type { ParamSpec } from "./params.js";
-/** The most bytes a source may declare for one answer (1 MB), and the default when it declares none (64 KB). */
+/** The most bytes a source may declare for one answer (1 MB), and the default when it declares none (64 KB): `events`' `MAX_BYTES`. */
 export declare const MAX_BYTES_LIMIT: number;
 export declare const DEFAULT_MAX_BYTES: number;
 /** Who may be asked, and how (design §2.2 `permission`). */

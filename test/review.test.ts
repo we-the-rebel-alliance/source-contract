@@ -116,6 +116,8 @@ describe("the limits §2.2 does not state", () => {
     assert.equal(events["properties"]["maxBytes"]["default"], 65536)
     assert.equal(events["properties"]["maxBytes"]["maximum"], 1048576)
     assert.notEqual(events["properties"]["maxBytes"]["minimum"], 1024)
+    // A declaration may omit it: the default is an annotation, never a required key.
+    assert.equal((events["required"] as string[]).includes("maxBytes"), false)
   })
 
   test("a page under 1024 bytes is not refused, and maxAgeSec, retentionDays and usd have no ceiling", () => {

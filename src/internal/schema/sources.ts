@@ -154,7 +154,8 @@ const common = {
     .int()
     .min(1)
     .max(MAX_BYTES_LIMIT)
-    .default(MAX_BYTES_DEFAULT)
+    .optional()
+    .meta({ default: MAX_BYTES_DEFAULT })
     .describe("The most bytes one result may take: default 65536 (64 KB), at most 1048576 (1 MB)."),
   retentionDays: z.int().min(1).optional().describe("How many days an events consumer keeps what it read."),
   urlHosts: urlHosts.optional(),

@@ -378,7 +378,6 @@
               "id",
               "tool",
               "cost",
-              "maxBytes",
               "kind",
               "reads",
               "permission"
@@ -716,7 +715,6 @@
               "id",
               "tool",
               "cost",
-              "maxBytes",
               "kind",
               "output",
               "permission"

@@ -6447,7 +6447,7 @@ var common = {
   private: boolean2().optional().describe("True when everything this source reads is personal: shown at consent."),
   cost,
   cadence: cadence.optional(),
-  maxBytes: int().min(1).max(MAX_BYTES_LIMIT).default(MAX_BYTES_DEFAULT).describe("The most bytes one result may take: default 65536 (64 KB), at most 1048576 (1 MB)."),
+  maxBytes: int().min(1).max(MAX_BYTES_LIMIT).optional().meta({ default: MAX_BYTES_DEFAULT }).describe("The most bytes one result may take: default 65536 (64 KB), at most 1048576 (1 MB)."),
   retentionDays: int().min(1).optional().describe("How many days an events consumer keeps what it read."),
   urlHosts: urlHosts.optional()
 };

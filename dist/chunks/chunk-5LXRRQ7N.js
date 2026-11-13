@@ -2,7 +2,14 @@
 import {
   findSource,
   maxBytesOf
-} from "./chunk-5UWITS44.js";
+} from "./chunk-RXI6NHF6.js";
+import {
+  ERROR_CODES,
+  PAGE,
+  PROPOSED_CODES,
+  canonicalCode,
+  resultProblems
+} from "./chunk-ZTRH3FEM.js";
 import {
   resolveParams,
   resolveSince
@@ -22,20 +29,7 @@ import {
 } from "./chunk-64DASBTN.js";
 
 // src/internal/failure.ts
-var FAILURE_CODES = [
-  "NEEDS_SIGN_IN",
-  "ACCOUNT_MISMATCH",
-  "CURSOR_INVALID",
-  "CURSOR_EXPIRED",
-  "RATE_LIMITED",
-  "TOO_LARGE",
-  "SCHEMA_VIOLATION",
-  "PERMISSION_DENIED",
-  "UNAVAILABLE",
-  "SCOPE_MISSING",
-  "BUDGET_EXCEEDED",
-  "SOURCE_DISABLED"
-];
+var FAILURE_CODES = ERROR_CODES;
 function failure(code, what, next, retryAfterSec) {
   return {
     code,
@@ -44,15 +38,17 @@ function failure(code, what, next, retryAfterSec) {
     ...retryAfterSec === void 0 ? {} : { retryAfterSec }
   };
 }
-var ALIASES = { AUTH_REQUIRED: "NEEDS_SIGN_IN" };
 function failureFromError(error) {
   const record = typeof error === "object" && error !== null ? error : {};
   const data = typeof record["data"] === "object" && record["data"] !== null ? record["data"] : {};
   const message = typeof record["message"] === "string" ? record["message"] : String(error);
   const raw = [record["code"], data["code"], /^([A-Z][A-Z_]+):/.exec(message)?.[1]].find((code2) => typeof code2 === "string");
-  const code = raw === void 0 ? void 0 : ALIASES[raw] ?? (FAILURE_CODES.includes(raw) ? raw : void 0);
+  const canonical = raw === void 0 ? void 0 : canonicalCode(raw);
+  const refusedInput = canonical !== void 0 && PROPOSED_CODES.includes(canonical);
+  const code = refusedInput ? "SCHEMA_VIOLATION" : canonical !== void 0 && FAILURE_CODES.includes(canonical) ? canonical : void 0;
   const first = message.split(/\r?\n/, 1)[0].slice(0, 300);
-  const next = typeof data["next"] === "string" ? data["next"] : /Next step: (.*)$/.exec(first)?.[1] ?? "Try again later; if it keeps failing, check the plugin's status.";
+  const fallback = refusedInput ? "Check the source's descriptor against the installed plugin's version; if they match, report it to the plugin's maintainers." : "Try again later; if it keeps failing, check the plugin's status.";
+  const next = typeof data["next"] === "string" ? data["next"] : /Next step: (.*)$/.exec(first)?.[1] ?? fallback;
   const what = first.replace(/^[A-Z][A-Z_]+:\s*/, "").replace(/\s*Next step:.*$/, "");
   const retry = typeof record["retryAfterSec"] === "number" ? record["retryAfterSec"] : typeof data["retryAfterSec"] === "number" ? data["retryAfterSec"] : void 0;
   return failure(code ?? "UNAVAILABLE", what || "the read failed", next, retry);
@@ -151,12 +147,9 @@ function acceptAnswer(source, account, answer, options = {}) {
   if (problem) return { ok: false, failure: problem };
   const value = answer;
   if (source.kind === "events") {
-    if (!Array.isArray(value["events"]) || typeof value["cursor"] !== "string" || typeof value["more"] !== "boolean") {
-      return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s page has no events list, cursor or more`, "Report it to the plugin's maintainers.") };
-    }
-    const limit = options.limit ?? 500;
-    if (value["events"].length > limit) {
-      return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s page has ${value["events"].length} events, over the limit of ${limit}`, "Report it to the plugin's maintainers.") };
+    const problems = resultProblems(value, options.limit ?? PAGE.max, maxBytesOf(source));
+    if (problems.length > 0) {
+      return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s page breaks the events contract: ${problems.slice(0, 3).join("; ")}`, "Report it to the plugin's maintainers.") };
     }
     return { ok: true, kind: "events", page: value };
   }

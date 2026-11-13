@@ -121,6 +121,17 @@ describe("read a snapshot", () => {
     assert.equal(fake.closed(), 1)
   })
 
+  test("reads a plugin's INPUT_INVALID or SOURCE_UNKNOWN as SCHEMA_VIOLATION, never as a reason to try again (D3)", async () => {
+    for (const message of ["INPUT_INVALID: the input is invalid", "EVENTS_SOURCE_UNKNOWN: this plugin lists one source, gws", "SOURCE_UNKNOWN: no such source. Next step: Pass gmail."]) {
+      const outcome = await read(fakeHost(() => Promise.reject(new Error(message))).host, todayRequest())
+      assert.equal(outcome.ok ? "ok" : outcome.failure.code, "SCHEMA_VIOLATION", message)
+      if (outcome.ok) continue
+      assert.doesNotMatch(outcome.failure.next, /Try again later/)
+    }
+    const own = await read(fakeHost(() => Promise.reject(new Error("SOURCE_UNKNOWN: no such source. Next step: Pass gmail."))).host, todayRequest())
+    assert.equal(own.ok ? "" : own.failure.next, "Pass gmail.")
+  })
+
   test("a source that asserts more than it declares is refused by the fence", async () => {
     const fake = fakeHost(() => snapshot, () => [["gws.read", `${ana}:gmail.users.messages.get`]])
     const outcome = await read(fake.host, todayRequest())
@@ -147,6 +158,21 @@ describe("read events", () => {
     const params = await read(fake.host, { installed: gws, source: "gws.gmail", consumer: "memory", grant, params: {}, context })
     assert.equal(params.ok ? "ok" : params.failure.code, "SCHEMA_VIOLATION")
     assert.equal(fake.calls.length, 0)
+  })
+
+  test("checks the page against the events contract: a page with §2.1's additions passes, a broken one is SCHEMA_VIOLATION", async () => {
+    const grant = { ...grantFor("gws.gmail"), consumer: "memory" }
+    const request = { installed: gws, source: "gws.gmail", consumer: "memory", grant, context }
+    const extended = { ...page, refused: [{ external_id: "m-9", reason: "secret" }], gap: { reason: "expired", since: "2026-11-01T00:00:00.000Z" } }
+    assert.equal((await read(fakeHost(() => extended).host, request)).ok, true)
+    for (const broken of [
+      { ...page, owner: { id: `mailto:${ana}` } },
+      { ...page, events: [{ source: "gmail", account: ana, external_id: "m-1", kind: "message" }] },
+      { ...page, gap: { reason: "sync-token-expired", since: "2026-11-01T00:00:00Z" } },
+    ]) {
+      const outcome = await read(fakeHost(() => broken).host, request)
+      assert.equal(outcome.ok ? "ok" : outcome.failure.code, "SCHEMA_VIOLATION")
+    }
   })
 })
 

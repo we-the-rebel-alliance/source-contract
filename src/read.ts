@@ -15,6 +15,7 @@
 import type { InstalledDescriptor, SourceItem } from "./descriptor.ts"
 import { findSource, maxBytesOf } from "./descriptor.ts"
 import type { Checked } from "./internal/checked.ts"
+import { PAGE, resultProblems } from "./internal/events.ts"
 import { failure, failureFromError, type ReadFailure } from "./internal/failure.ts"
 import { resolveParams, resolveSince, type ParamsContext } from "./params.ts"
 import { detailRules, grantCovers, probeRules, sessionRules, type Grant, type PermissionRule } from "./permission.ts"
@@ -201,13 +202,11 @@ export function acceptAnswer(source: SourceItem, account: string, answer: unknow
   if (problem) return { ok: false, failure: problem }
   const value = answer as Record<string, unknown>
   if (source.kind === "events") {
-    // TODO(the family's events PR): check the page with the family's `resultProblems`, with §2.1's additions.
-    if (!Array.isArray(value["events"]) || typeof value["cursor"] !== "string" || typeof value["more"] !== "boolean") {
-      return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s page has no events list, cursor or more`, "Report it to the plugin's maintainers.") }
-    }
-    const limit = options.limit ?? 500
-    if (value["events"].length > limit) {
-      return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s page has ${value["events"].length} events, over the limit of ${limit}`, "Report it to the plugin's maintainers.") }
+    // The page against the events contract with §2.1's additions, under the source's maxBytes (checked above), and the
+    // limit the read asked for.
+    const problems = resultProblems(value, options.limit ?? PAGE.max, maxBytesOf(source))
+    if (problems.length > 0) {
+      return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s page breaks the events contract: ${problems.slice(0, 3).join("; ")}`, "Report it to the plugin's maintainers.") }
     }
     return { ok: true, kind: "events", page: value as EventsPage }
   }

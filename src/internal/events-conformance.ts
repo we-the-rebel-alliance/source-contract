@@ -23,6 +23,7 @@
  */
 import { decodeBoundCursor, encodeBoundCursor, encodeCursor, type CursorBinding, type Scope } from "../cursor.ts"
 import {
+  isEventKindIn,
   MAX_PAGE_BYTES,
   PAGE,
   parseSourceError,
@@ -72,6 +73,11 @@ export interface ConformanceFixtures {
   readonly maxBytes?: number
   /** The kinds the source declares (`reads`): every event is one of them. */
   readonly kinds?: readonly string[]
+  /**
+   * The source id's first segment (`jelly` for `jelly.routine-runs`): every `x-` kind must be in it (decision D13).
+   * Without it, any well-formed `x-<namespace>/<kind>` passes.
+   */
+  readonly namespace?: string
   /** The external_ids a full listing from `since` refuses, in order. */
   readonly refused?: readonly string[]
   /** Passed as `scope` on every call. */
@@ -148,6 +154,7 @@ export async function eventsListConformance(list: EventsList, fixtures: Conforma
       if (event.source !== fixtures.source) problems.push(`${what}: an event names the source ${event.source}, not ${fixtures.source}`)
       if (fixtures.account !== undefined && event.account !== fixtures.account) problems.push(`${what}: an event names the account ${event.account}, not ${fixtures.account}`)
       if (since !== undefined && Date.parse(event.occurred_at) < since) problems.push(`${what}: the event ${event.external_id} is from before since`)
+      if (fixtures.namespace !== undefined && !isEventKindIn(event.kind, fixtures.namespace)) problems.push(`${what}: the event ${event.external_id} is a ${event.kind}, outside the namespace ${fixtures.namespace}`)
       if (fixtures.kinds !== undefined && !fixtures.kinds.includes(event.kind)) problems.push(`${what}: the event ${event.external_id} is a ${event.kind}, which the source does not declare`)
       const secrets = secretKinds([event.title, event.text].filter(Boolean).join("\n"))
       if (secrets.length > 0) problems.push(`${what}: the event ${event.external_id} holds a secret (${secrets.join(", ")}); it belongs in refused[]`)

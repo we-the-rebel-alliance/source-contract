@@ -67,6 +67,25 @@ export const EXTENSION_KIND = /^x-[a-z][a-z0-9-]*\/[a-z][a-z0-9-]*$/
 export const isEventKind = (kind: unknown): kind is EventKind =>
   typeof kind === "string" && ((EVENT_KINDS as readonly string[]).includes(kind) || (kind.length <= 64 && EXTENSION_KIND.test(kind)))
 
+/** An extension kind's namespace: `jelly` in `x-jelly/routine-run`; undefined for a core kind or a malformed one. */
+export function extensionNamespace(kind: string): string | undefined {
+  return isEventKind(kind) && kind.startsWith("x-") ? kind.slice(2, kind.indexOf("/")) : undefined
+}
+
+/**
+ * True for a core kind, or an extension kind in `namespace`: the first segment of the source's id (`jelly` for
+ * `jelly.routine-runs`), as Memory's schema checks a descriptor's `reads` (decision D13, (b)). An extension kind of
+ * another namespace is refused, so one plugin cannot speak in another's vocabulary.
+ */
+export function isEventKindIn(kind: unknown, namespace: string): kind is EventKind {
+  if (!isEventKind(kind)) return false
+  const own = extensionNamespace(kind)
+  return own === undefined || own === namespace
+}
+
+/** The namespace of a source id: its first dotted segment (`gws` in `gws.gmail`). */
+export const sourceNamespace = (sourceId: string): string => sourceId.split(".", 1)[0] ?? sourceId
+
 /** The most characters each field takes, and the most items each list takes. */
 export const EVENT_LIMITS = {
   source: 64,

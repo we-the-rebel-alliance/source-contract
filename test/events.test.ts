@@ -10,7 +10,10 @@ import {
   eventsListConformance,
   eventsListResult,
   fitPage,
+  extensionNamespace,
   isEventKind,
+  isEventKindIn,
+  sourceNamespace,
   makeEvent,
   parseEventsListInput,
   parseSourceError,
@@ -38,6 +41,44 @@ describe("kinds", () => {
       expect(eventProblems(event(1, { kind: kind as never })), kind).toEqual([])
     }
     for (const kind of ["tweet", "x-/a", "x-jelly", "x-Jelly/run", "x-jelly/Run", `x-jelly/${"a".repeat(60)}`]) expect(isEventKind(kind), kind).toBe(false)
+  })
+})
+
+describe("extension kinds and their namespace (D13, source-contract#15)", () => {
+  test("x-jelly/routine-run is a kind, in jelly's namespace and no other", () => {
+    expect(isEventKind("x-jelly/routine-run")).toBe(true)
+    expect(extensionNamespace("x-jelly/routine-run")).toBe("jelly")
+    expect(extensionNamespace("meeting")).toBeUndefined()
+    expect(extensionNamespace("x-jelly")).toBeUndefined()
+    expect(sourceNamespace("jelly.routine-runs")).toBe("jelly")
+    expect(sourceNamespace("gws.gmail")).toBe("gws")
+    expect(isEventKindIn("x-jelly/routine-run", sourceNamespace("jelly.routine-runs"))).toBe(true)
+    expect(isEventKindIn("meeting", "jelly")).toBe(true)
+    expect(isEventKindIn("x-mem/suggestion", "jelly")).toBe(false)
+    expect(isEventKindIn("x-jelly/Run", "jelly")).toBe(false)
+  })
+
+  test("the conformance refuses an x- kind outside the source's namespace, when told the namespace", async () => {
+    const items = [event(0, { kind: "x-jelly/routine-run" }), event(1)]
+    const list = async (input: EventsListInput) => {
+      const parsed = parseEventsListInput(input)
+      if (!parsed.ok) throw new SourceError({ code: "INPUT_INVALID", what: parsed.problems.join("; "), next: "Fix it." })
+      if (parsed.value.source !== undefined && parsed.value.source !== "demo") throw new SourceError({ code: "SOURCE_UNKNOWN", what: "no", next: "Pass demo." })
+      if (parsed.value.cursor !== undefined) {
+        const decoded = decodeBoundCursor({ plugin: "jelly", source: "demo", account: "work" }, parsed.value.cursor)
+        if (!decoded.ok) throw new SourceError({ code: "CURSOR_INVALID", what: "no", next: "Start again." })
+        const n = decoded.state["n"] as number
+        const page = items.slice(n, n + parsed.value.limit)
+        return eventsListResult(WHOSE, page, encodeBoundCursor({ plugin: "jelly", source: "demo", account: "work" }, { n: n + page.length }), n + page.length < items.length)
+      }
+      const from = parsed.value.since !== undefined && parsed.value.since > T0 + 3_600_000 ? items.length : 0
+      const page = items.slice(from, from + parsed.value.limit)
+      return eventsListResult(WHOSE, page, encodeBoundCursor({ plugin: "jelly", source: "demo", account: "work" }, { n: from + page.length }), from + page.length < items.length)
+    }
+    const fixtures = { source: "demo", account: "work", since: "2026-11-01T08:00:00Z", expected: ["item-0", "item-1"] }
+    expect(await eventsListConformance(list, { ...fixtures, namespace: "jelly" })).toEqual([])
+    expect(await eventsListConformance(list, fixtures)).toEqual([])
+    expect(await eventsListConformance(list, { ...fixtures, namespace: "mem" })).toContainEqual(expect.stringContaining("is a x-jelly/routine-run, outside the namespace mem"))
   })
 })
 

@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
   outputValidator
-} from "./chunk-3F4IRHS5.js";
+} from "./chunk-64DASBTN.js";
 
 // src/pick.ts
 var MAX_PICK_PATHS = 50;

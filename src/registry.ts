@@ -8,8 +8,8 @@
  * Seeded from what is in production: jelly's Home template schemas (`protocol/contracts/src/home-data.ts` in
  * we-the-rebel-alliance/app), where `agenda` is gws `calendar.today`'s shape, with `thread`, `table` and `record`.
  * Host-neutral changes from the seed: enums are closed (a producer must send a known value); `image` takes an https
- * `url` or a `dataUri` (jelly's saved-file id is jelly's own), and its `dataUri` may carry up to 1 MB, the most a
- * source's `maxBytes` allows, so gws `images.read` fits (app#2346).
+ * `url` or a `dataUri` (jelly's saved-file id is jelly's own), and its `dataUri` is capped so the whole answer fits in
+ * the 1 MB a source's `maxBytes` allows, so gws `images.read` fits (app#2346).
  *
  * The registry only grows within a contract version: a name is never removed or narrowed, so a source that validates
  * today still validates under a later minor version.
@@ -37,8 +37,12 @@ const item = {
   ask: text(200).optional(),
 }
 
-/** The most characters a `dataUri` takes: 1 MB of image as base64, and its prefix. */
-const DATA_URI_MAX = Math.ceil((1024 * 1024 * 4) / 3) + 64
+/**
+ * The most characters a `dataUri` takes: 1 MB less 4 KB, so the whole answer (the data URI, the other fields and the
+ * envelope) fits in the 1 MB that `maxBytes` allows, counted as the answer's JSON bytes (#7, decision 21). That is about
+ * 760 KB of image; a source downsizes a larger one, or answers an https `url`.
+ */
+export const IMAGE_DATA_URI_MAX = 1024 * 1024 - 4 * 1024
 
 const agenda = z
   .object({
@@ -167,7 +171,7 @@ const image = z
     url: httpsUrl.optional(),
     dataUri: z
       .string()
-      .max(DATA_URI_MAX)
+      .max(IMAGE_DATA_URI_MAX)
       .regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/, "must be a base64 data URI of a png, jpeg or webp image")
       .optional(),
     alt: z.string().min(1).max(200),

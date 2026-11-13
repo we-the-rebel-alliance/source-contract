@@ -1,0 +1,112 @@
+name: CI
+
+# Every pull request and every push to main. Every step also runs locally:
+#   npm ci --ignore-scripts && npm run check
+# (Bun must be installed for the Bun tests and for check:dist to load dist/ on Bun.)
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: actionlint
+        run: |
+          set -euo pipefail
+          version=1.7.12
+          base="https://github.com/rhysd/actionlint/releases/download/v${version}"
+          curl -sSfLO "${base}/actionlint_${version}_linux_amd64.tar.gz"
+          curl -sSfLO "${base}/actionlint_${version}_checksums.txt"
+          grep " actionlint_${version}_linux_amd64.tar.gz$" "actionlint_${version}_checksums.txt" | sha256sum -c -
+          tar xzf "actionlint_${version}_linux_amd64.tar.gz" actionlint
+          ./actionlint -color
+
+  # Typecheck, build, the committed dist/ is what the build makes, dist/ needs nothing installed, and the kit accepts
+  # the examples.
+  build:
+    name: Typecheck, build and dist
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+          no-cache: true
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - run: npm run build
+      - name: dist/ is current
+        run: |
+          set -euo pipefail
+          if [ -n "$(git status --porcelain -- dist)" ]; then
+            git status --porcelain -- dist
+            echo "::error::dist/ is not what npm run build makes. Run npm run build and commit dist/."
+            exit 1
+          fi
+      - run: npm run check:dist
+      - name: Conformance self-test
+        run: npm run conformance:self-test
+      - name: Release files (dry run)
+        run: node scripts/release.mjs --dry-run
+
+  test-node:
+    name: Tests (Node ${{ matrix.node }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts
+      - run: npm run test:node
+
+  test-bun:
+    name: Tests (Bun)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+          no-cache: true
+      - run: npm ci --ignore-scripts
+      - run: npm run test:bun

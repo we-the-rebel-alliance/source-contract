@@ -1,0 +1,58 @@
+{
+  "name": "@joe-broadhead/opencode-slack",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Example: the Slack plugin's workspace source as contract version 1 declares it. Every person, id and message is invented.",
+  "sources": {
+    "contractVersion": 1,
+    "items": [
+      {
+        "id": "slack.workspace",
+        "kind": "events",
+        "reads": "message",
+        "tool": "events_list",
+        "accounts": {
+          "named": false
+        },
+        "scope": {
+          "keys": [
+            "channels"
+          ],
+          "describe": "Channels and direct messages to read.",
+          "suggest": {
+            "tool": "slack_list_user_channels",
+            "operations": [
+              "slack_list_user_channels"
+            ]
+          }
+        },
+        "details": [
+          {
+            "id": "slack.workspace.thread",
+            "tool": "slack_read_thread",
+            "from": [
+              "thread"
+            ]
+          }
+        ],
+        "permission": {
+          "events": "slack_events_list",
+          "operations": [
+            "slack_read_user_profile",
+            "slack_read_channel",
+            "slack_read_thread"
+          ]
+        },
+        "private": true,
+        "cost": {
+          "class": "free"
+        },
+        "maxBytes": 262144,
+        "urlHosts": [
+          "*.slack.com"
+        ]
+      }
+    ]
+  }
+}

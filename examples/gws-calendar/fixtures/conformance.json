@@ -1,0 +1,464 @@
+{
+  "$comment": "Sanitised from the off-line gws pilot fixture: every address, meeting and id is invented. Recorded as contract-version-1 page results, with page tokens, sync tokens, a 410 and a cancellation. The kit replays each case by its input exactly.",
+  "plugin": "@joe-broadhead/opencode-gws",
+  "account": "sam.rivera@example.com",
+  "tools": [
+    {
+      "id": "events_list",
+      "readOnly": true
+    },
+    {
+      "id": "calendar_today",
+      "readOnly": true
+    }
+  ],
+  "sources": {
+    "gws.calendar": {
+      "cases": [
+        {
+          "name": "a first page, with another page behind it",
+          "input": {
+            "source": "calendar",
+            "account": "sam.rivera@example.com"
+          },
+          "expect": "page",
+          "asserts": [
+            {
+              "action": "gws.events_list",
+              "resource": "*"
+            },
+            {
+              "action": "gws.read",
+              "resource": "sam.rivera@example.com:calendar.events.list"
+            }
+          ],
+          "answer": {
+            "source": "gws.calendar",
+            "plugin": "@joe-broadhead/opencode-gws",
+            "account": "sam.rivera@example.com",
+            "owner": {
+              "id": "mailto:sam.rivera@example.com",
+              "label": "Sam Rivera"
+            },
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "trust": "untrusted",
+            "events": [
+              {
+                "kind": "meeting",
+                "external_id": "evt-a",
+                "occurred_at": "2026-11-01T10:00:00.000Z",
+                "thread": "calendar:evt-a",
+                "actors": [
+                  {
+                    "role": "organizer",
+                    "id": "mailto:ama.mensah@example.com",
+                    "label": "Ama Mensah"
+                  },
+                  {
+                    "role": "attendee",
+                    "id": "mailto:sam.rivera@example.com",
+                    "label": "Sam Rivera"
+                  }
+                ],
+                "title": "Quarterly plan",
+                "text": "Agenda: Q4 numbers, hiring, the board pack.",
+                "url": "https://calendar.google.com/calendar/event?eid=evt-a",
+                "labels": [
+                  "confirmed",
+                  "Room 3"
+                ],
+                "hash": "sha256:5e285b4305eb32df254d2d81053b134e85cb25a71ee3a5019d14f5348c952713"
+              }
+            ],
+            "cursor": "calendar:sam.rivera@example.com:page:page-2",
+            "more": true,
+            "refused": [],
+            "failed": []
+          }
+        },
+        {
+          "name": "the next page, with a cancelled meeting",
+          "input": {
+            "source": "calendar",
+            "account": "sam.rivera@example.com",
+            "cursor": "calendar:sam.rivera@example.com:page:page-2"
+          },
+          "expect": "page",
+          "asserts": [
+            {
+              "action": "gws.read",
+              "resource": "sam.rivera@example.com:calendar.events.list"
+            }
+          ],
+          "answer": {
+            "source": "gws.calendar",
+            "plugin": "@joe-broadhead/opencode-gws",
+            "account": "sam.rivera@example.com",
+            "owner": {
+              "id": "mailto:sam.rivera@example.com",
+              "label": "Sam Rivera"
+            },
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "trust": "untrusted",
+            "events": [
+              {
+                "kind": "meeting",
+                "external_id": "evt-c",
+                "occurred_at": "2026-11-03T09:00:00.000Z",
+                "thread": "calendar:evt-c",
+                "actors": [
+                  {
+                    "role": "organizer",
+                    "id": "mailto:sam.rivera@example.com",
+                    "label": "Sam Rivera"
+                  },
+                  {
+                    "role": "attendee",
+                    "id": "mailto:jordan.lee@example.org",
+                    "label": "Jordan Lee"
+                  }
+                ],
+                "title": "Design review",
+                "text": "Bring the API sketch.",
+                "url": "https://calendar.google.com/calendar/event?eid=evt-c",
+                "labels": [
+                  "confirmed"
+                ],
+                "hash": "sha256:35a9991e30f4844fdea4c92224d8afb681f00f72d604abe0ba8015d1f4d45c47"
+              },
+              {
+                "kind": "meeting",
+                "external_id": "evt-b",
+                "occurred_at": "2026-11-02T15:00:00.000Z",
+                "thread": "calendar:evt-b",
+                "labels": [
+                  "cancelled"
+                ],
+                "hash": "sha256:f9725301a6077d21a11b659db1fb95d33731db09f7a1284c51b483743c14439b"
+              }
+            ],
+            "cursor": "calendar:sam.rivera@example.com:sync:sync-1",
+            "more": false,
+            "refused": [
+              {
+                "external_id": "evt-e",
+                "reason": "the event is not the signed-in person's to read"
+              }
+            ],
+            "failed": []
+          }
+        },
+        {
+          "name": "one failed event holds the cursor back",
+          "input": {
+            "source": "calendar",
+            "account": "sam.rivera@example.com",
+            "cursor": "calendar:sam.rivera@example.com:page:page-2",
+            "limit": 2
+          },
+          "expect": "page",
+          "asserts": [
+            {
+              "action": "gws.read",
+              "resource": "sam.rivera@example.com:calendar.events.list"
+            }
+          ],
+          "answer": {
+            "source": "gws.calendar",
+            "plugin": "@joe-broadhead/opencode-gws",
+            "account": "sam.rivera@example.com",
+            "owner": {
+              "id": "mailto:sam.rivera@example.com",
+              "label": "Sam Rivera"
+            },
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "trust": "untrusted",
+            "events": [
+              {
+                "kind": "meeting",
+                "external_id": "evt-c",
+                "occurred_at": "2026-11-03T09:00:00.000Z",
+                "thread": "calendar:evt-c",
+                "actors": [
+                  {
+                    "role": "organizer",
+                    "id": "mailto:sam.rivera@example.com",
+                    "label": "Sam Rivera"
+                  },
+                  {
+                    "role": "attendee",
+                    "id": "mailto:jordan.lee@example.org",
+                    "label": "Jordan Lee"
+                  }
+                ],
+                "title": "Design review",
+                "text": "Bring the API sketch.",
+                "url": "https://calendar.google.com/calendar/event?eid=evt-c",
+                "labels": [
+                  "confirmed"
+                ],
+                "hash": "sha256:35a9991e30f4844fdea4c92224d8afb681f00f72d604abe0ba8015d1f4d45c47"
+              },
+              {
+                "kind": "meeting",
+                "external_id": "evt-b",
+                "occurred_at": "2026-11-02T15:00:00.000Z",
+                "thread": "calendar:evt-b",
+                "labels": [
+                  "cancelled"
+                ],
+                "hash": "sha256:f9725301a6077d21a11b659db1fb95d33731db09f7a1284c51b483743c14439b"
+              }
+            ],
+            "cursor": "calendar:sam.rivera@example.com:page:page-2",
+            "more": true,
+            "refused": [],
+            "failed": [
+              {
+                "external_id": "evt-d",
+                "reason": "the provider answered RATE_LIMITED for this event"
+              }
+            ]
+          }
+        },
+        {
+          "name": "a since before the window restarts with a gap",
+          "input": {
+            "source": "calendar",
+            "account": "sam.rivera@example.com",
+            "since": "2026-01-01T00:00:00.000Z"
+          },
+          "expect": "page",
+          "asserts": [
+            {
+              "action": "gws.read",
+              "resource": "sam.rivera@example.com:calendar.events.list"
+            }
+          ],
+          "answer": {
+            "source": "gws.calendar",
+            "plugin": "@joe-broadhead/opencode-gws",
+            "account": "sam.rivera@example.com",
+            "owner": {
+              "id": "mailto:sam.rivera@example.com",
+              "label": "Sam Rivera"
+            },
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "trust": "untrusted",
+            "events": [
+              {
+                "kind": "meeting",
+                "external_id": "evt-a",
+                "occurred_at": "2026-11-01T10:00:00.000Z",
+                "thread": "calendar:evt-a",
+                "actors": [
+                  {
+                    "role": "organizer",
+                    "id": "mailto:ama.mensah@example.com",
+                    "label": "Ama Mensah"
+                  },
+                  {
+                    "role": "attendee",
+                    "id": "mailto:sam.rivera@example.com",
+                    "label": "Sam Rivera"
+                  }
+                ],
+                "title": "Quarterly plan",
+                "text": "Agenda: Q4 numbers, hiring, the board pack.",
+                "url": "https://calendar.google.com/calendar/event?eid=evt-a",
+                "labels": [
+                  "confirmed",
+                  "Room 3"
+                ],
+                "hash": "sha256:5e285b4305eb32df254d2d81053b134e85cb25a71ee3a5019d14f5348c952713"
+              }
+            ],
+            "cursor": "calendar:sam.rivera@example.com:sync:sync-2",
+            "more": false,
+            "refused": [],
+            "failed": [],
+            "gap": {
+              "reason": "window-truncated",
+              "since": "2026-10-13T09:00:00.000Z"
+            }
+          }
+        },
+        {
+          "name": "a sync token Google has forgotten is CURSOR_EXPIRED",
+          "input": {
+            "source": "calendar",
+            "account": "sam.rivera@example.com",
+            "cursor": "calendar:sam.rivera@example.com:sync:sync-expired"
+          },
+          "expect": "expired",
+          "asserts": [
+            {
+              "action": "gws.read",
+              "resource": "sam.rivera@example.com:calendar.events.list"
+            }
+          ],
+          "refuses": "CURSOR_EXPIRED: Google no longer keeps the history this cursor names. Next step: read again with since to restart the window.",
+          "since": "2026-10-13T09:00:00.000Z"
+        },
+        {
+          "name": "the restarted window reads on",
+          "input": {
+            "since": "2026-10-13T09:00:00.000Z"
+          },
+          "expect": "page",
+          "asserts": [
+            {
+              "action": "gws.read",
+              "resource": "sam.rivera@example.com:calendar.events.list"
+            }
+          ],
+          "answer": {
+            "source": "gws.calendar",
+            "plugin": "@joe-broadhead/opencode-gws",
+            "account": "sam.rivera@example.com",
+            "owner": {
+              "id": "mailto:sam.rivera@example.com",
+              "label": "Sam Rivera"
+            },
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "trust": "untrusted",
+            "events": [
+              {
+                "kind": "meeting",
+                "external_id": "evt-a",
+                "occurred_at": "2026-11-01T10:00:00.000Z",
+                "thread": "calendar:evt-a",
+                "actors": [
+                  {
+                    "role": "organizer",
+                    "id": "mailto:ama.mensah@example.com",
+                    "label": "Ama Mensah"
+                  },
+                  {
+                    "role": "attendee",
+                    "id": "mailto:sam.rivera@example.com",
+                    "label": "Sam Rivera"
+                  }
+                ],
+                "title": "Quarterly plan",
+                "text": "Agenda: Q4 numbers, hiring, the board pack.",
+                "url": "https://calendar.google.com/calendar/event?eid=evt-a",
+                "labels": [
+                  "confirmed",
+                  "Room 3"
+                ],
+                "hash": "sha256:5e285b4305eb32df254d2d81053b134e85cb25a71ee3a5019d14f5348c952713"
+              }
+            ],
+            "cursor": "calendar:sam.rivera@example.com:sync:sync-3",
+            "more": false,
+            "refused": [],
+            "failed": []
+          }
+        },
+        {
+          "name": "a scope key this source does not declare is refused",
+          "input": {
+            "source": "calendar",
+            "account": "sam.rivera@example.com",
+            "scope": {
+              "labels": [
+                "INBOX"
+              ]
+            }
+          },
+          "expect": {
+            "refuses": "SCOPE_UNKNOWN"
+          },
+          "refuses": "SCOPE_UNKNOWN: this source reads calendars, not labels. Next step: confirm the calendars to read.",
+          "asserts": []
+        }
+      ],
+      "probe": {
+        "input": {
+          "source": "gws.calendar",
+          "account": "sam.rivera@example.com"
+        },
+        "asserts": [
+          {
+            "action": "gws.events_list",
+            "resource": "*"
+          },
+          {
+            "action": "gws.read",
+            "resource": "sam.rivera@example.com:calendar.calendarList.get"
+          }
+        ],
+        "answer": {
+          "account": "sam.rivera@example.com",
+          "owner": {
+            "id": "mailto:sam.rivera@example.com",
+            "label": "Sam Rivera"
+          },
+          "scopes": []
+        }
+      },
+      "details": [],
+      "identity": [
+        "calendar.calendarList.get"
+      ]
+    },
+    "gws.calendar.today": {
+      "cases": [],
+      "probe": {
+        "input": {
+          "source": "gws.calendar.today",
+          "account": "sam.rivera@example.com"
+        },
+        "asserts": [
+          {
+            "action": "gws.calendar_today",
+            "resource": "*"
+          },
+          {
+            "action": "gws.read",
+            "resource": "sam.rivera@example.com:calendar.calendars.get"
+          }
+        ],
+        "answer": {
+          "account": "sam.rivera@example.com",
+          "owner": {
+            "id": "mailto:sam.rivera@example.com",
+            "label": "Sam Rivera"
+          },
+          "scopes": []
+        }
+      },
+      "details": [],
+      "identity": [
+        "calendar.calendars.get"
+      ],
+      "snapshot": {
+        "input": {
+          "params": {
+            "window": "today"
+          }
+        },
+        "asserts": [
+          {
+            "action": "gws.calendar_today",
+            "resource": "*"
+          },
+          {
+            "action": "gws.read",
+            "resource": "sam.rivera@example.com:calendar.events.list"
+          }
+        ],
+        "answer": {
+          "data": {
+            "account": "sam.rivera@example.com",
+            "at": "2026-11-13T09:00:00.000Z",
+            "state": "ready",
+            "events": []
+          },
+          "asOf": "2026-11-13T09:00:00.000Z"
+        }
+      }
+    }
+  }
+}

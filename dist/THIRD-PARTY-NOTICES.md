@@ -1,6 +1,6 @@
 # Bundled packages
 
-dist/ bundles these packages, so an install needs none of them.
+dist/ bundles these packages and this data, so an install needs none of them.
 
 ## zod 4.6.7 (MIT)
 
@@ -25,3 +25,11 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Public Suffix List (MPL-2.0)
+
+The conformance kit bundles the Public Suffix List, ICANN and PRIVATE sections, from
+https://publicsuffix.org/list/public_suffix_list.dat.
+
+This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0. If a copy of the MPL was not
+distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.

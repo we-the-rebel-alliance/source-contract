@@ -1,0 +1,51 @@
+{
+  "name": "@joe-broadhead/opencode-gws",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Example: the gws plugin's Gmail source as contract version 1 declares it. Every address and message is invented.",
+  "sources": {
+    "contractVersion": 1,
+    "items": [
+      {
+        "id": "gws.gmail",
+        "kind": "events",
+        "reads": "message",
+        "tool": "events_list",
+        "input": {
+          "source": "gmail"
+        },
+        "accounts": {
+          "named": true
+        },
+        "details": [
+          {
+            "id": "gws.gmail.message",
+            "tool": "read",
+            "from": [
+              "external_id"
+            ]
+          }
+        ],
+        "permission": {
+          "events": "gws.events_list",
+          "operations": [
+            "gmail.users.getProfile",
+            "gmail.users.history.list",
+            "gmail.users.messages.list",
+            "gmail.users.messages.get"
+          ]
+        },
+        "private": true,
+        "cost": {
+          "class": "free"
+        },
+        "maxBytes": 262144,
+        "retentionDays": 30,
+        "urlHosts": [
+          "mail.google.com"
+        ]
+      }
+    ]
+  }
+}

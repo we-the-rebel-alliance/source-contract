@@ -9,10 +9,12 @@ import {
 } from "./chunk-ZTRH3FEM.js";
 import {
   OUTPUT_NAMES,
+  isOutputName
+} from "./chunk-UGUA267L.js";
+import {
   _enum,
   array,
   boolean,
-  isOutputName,
   looseObject,
   number,
   object,
@@ -20,7 +22,7 @@ import {
   record,
   string,
   unknown
-} from "./chunk-64DASBTN.js";
+} from "./chunk-6RDMPYYW.js";
 
 // src/descriptor.ts
 import { createHash } from "node:crypto";

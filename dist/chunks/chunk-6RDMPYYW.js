@@ -745,9 +745,9 @@ var Class = class {
   constructor(..._args) {
   }
 };
-function members(proto, table2) {
-  for (const key in table2) {
-    const desc = Object.getOwnPropertyDescriptor(table2, key);
+function members(proto, table) {
+  for (const key in table) {
+    const desc = Object.getOwnPropertyDescriptor(table, key);
     if (desc.get)
       Object.defineProperty(proto, key, { ...desc, enumerable: false });
     else
@@ -762,10 +762,10 @@ function hide(inst, key, value) {
   return own(inst, key, value, false);
 }
 // @__NO_SIDE_EFFECTS__
-function derived(computes, table2) {
+function derived(computes, table) {
   for (const key in computes) {
     const compute = computes[key];
-    Object.defineProperty(table2, key, {
+    Object.defineProperty(table, key, {
       configurable: true,
       enumerable: true,
       get() {
@@ -776,7 +776,7 @@ function derived(computes, table2) {
       }
     });
   }
-  return table2;
+  return table;
 }
 function defineBound(proto, key, fn) {
   Object.defineProperty(proto, key, {
@@ -2286,9 +2286,9 @@ var $ZodArray = /* @__PURE__ */ $constructor("$ZodArray", (inst, def) => {
     const proms = [];
     const abortEarly = ctx?.abortEarly;
     for (let i = 0; i < input.length; i++) {
-      const item2 = input[i];
+      const item = input[i];
       const result = def.element._zod.run({
-        value: item2,
+        value: item,
         issues: []
       }, ctx);
       if (result instanceof Promise) {
@@ -2677,6 +2677,89 @@ var $ZodUnion = /* @__PURE__ */ $constructor("$ZodUnion", (inst, def) => {
     });
   };
 });
+function discriminatorMap(def) {
+  const map = /* @__PURE__ */ new Map();
+  for (const option of def.options) {
+    const values = option._zod.propValues?.[def.discriminator];
+    if (!values || values.size === 0)
+      throw new Error(`Invalid discriminated union option at index "${def.options.indexOf(option)}"`);
+    for (const value of values) {
+      if (map.has(value)) {
+        if (value !== void 0)
+          throw new Error(`Duplicate discriminator value "${String(value)}"`);
+        map.set(value, null);
+      } else {
+        map.set(value, option);
+      }
+    }
+  }
+  return map;
+}
+var $ZodDiscriminatedUnion = /* @__PURE__ */ $constructor("$ZodDiscriminatedUnion", (inst, def) => {
+  def.inclusive = false;
+  $ZodUnion.init(inst, def);
+  const _super = inst._zod.parse;
+  defineLazyInternal(inst, "propValues", (zod) => {
+    const propValues = {};
+    let undefinedCount = 0;
+    for (const option of zod.def.options) {
+      const pv = option._zod.propValues;
+      if (!pv || Object.keys(pv).length === 0)
+        throw new Error(`Invalid discriminated union option at index "${zod.def.options.indexOf(option)}"`);
+      if (pv[zod.def.discriminator]?.has(void 0))
+        undefinedCount++;
+      for (const [k, v] of Object.entries(pv)) {
+        if (!Object.prototype.hasOwnProperty.call(propValues, k)) {
+          assignProp(propValues, k, /* @__PURE__ */ new Set());
+        }
+        for (const val of v) {
+          propValues[k].add(val);
+        }
+      }
+    }
+    if (!zod.def.unionFallback && undefinedCount > 1)
+      propValues[zod.def.discriminator]?.delete(void 0);
+    return propValues;
+  });
+  def.options.forEach((option, i) => {
+    const propShape = rawShape(option._zod.def);
+    if (propShape && !Object.prototype.hasOwnProperty.call(propShape, def.discriminator)) {
+      throw new Error(`Invalid discriminated union option at index "${i}"`);
+    }
+  });
+  const disc = cached(() => discriminatorMap(def));
+  inst._zod.parse = (payload, ctx) => {
+    const input = payload.value;
+    if (!isObject(input)) {
+      payload.issues.push({
+        code: "invalid_type",
+        expected: "object",
+        input,
+        inst
+      });
+      return payload;
+    }
+    const value = input?.[def.discriminator];
+    const opt = disc.value.get(value);
+    if (opt && (value !== void 0 || ctx.direction !== "backward")) {
+      return opt._zod.run(payload, ctx);
+    }
+    if (def.unionFallback || ctx.direction === "backward") {
+      return _super(payload, ctx);
+    }
+    payload.issues.push({
+      code: "invalid_union",
+      errors: [],
+      note: "No matching discriminator",
+      discriminator: def.discriminator,
+      options: Array.from(disc.value.keys()).filter((value2) => disc.value.get(value2) !== null),
+      input,
+      path: [def.discriminator],
+      inst
+    });
+    return payload;
+  };
+});
 var $ZodIntersection = /* @__PURE__ */ $constructor("$ZodIntersection", (inst, def) => {
   $ZodType.init(inst, def);
   inst._zod.parse = (payload, ctx) => {
@@ -2963,6 +3046,28 @@ var $ZodEnum = /* @__PURE__ */ $constructor("$ZodEnum", (inst, def) => {
     payload.issues.push({
       code: "invalid_value",
       values,
+      input,
+      inst
+    });
+    return payload;
+  };
+});
+var $ZodLiteral = /* @__PURE__ */ $constructor("$ZodLiteral", (inst, def) => {
+  $ZodType.init(inst, def);
+  const values = new Set(def.values);
+  inst._zod.values = values;
+  defineLazyInternal(inst, "pattern", (zod) => {
+    const vals = zod.def.values;
+    return new RegExp(vals.length ? `^(${vals.map((o) => typeof o === "string" ? escapeRegex(o) : o ? escapeRegex(o.toString()) : String(o)).join("|")})$` : "^[^\\s\\S]$");
+  });
+  inst._zod.parse = (payload, _ctx) => {
+    const input = payload.value;
+    if (values.has(input)) {
+      return payload;
+    }
+    payload.issues.push({
+      code: "invalid_value",
+      values: def.values,
       input,
       inst
     });
@@ -4694,8 +4799,8 @@ function isTransforming(_schema, _ctx) {
     return false;
   }
   if (def.type === "tuple") {
-    for (const item2 of def.items) {
-      if (isTransforming(item2, ctx))
+    for (const item of def.items) {
+      if (isTransforming(item, ctx))
         return true;
     }
     if (def.rest && isTransforming(def.rest, ctx))
@@ -4782,8 +4887,8 @@ var contributors = {
 function aggregateChecks(schema) {
   const agg = {};
   const def = schema._zod.def;
-  const list2 = schema._zod.traits.has("$ZodCheck") ? [schema, ...def.checks ?? []] : def.checks ?? [];
-  for (const ch of list2)
+  const list = schema._zod.traits.has("$ZodCheck") ? [schema, ...def.checks ?? []] : def.checks ?? [];
+  for (const ch of list)
     contributors[ch._zod.def.check]?.(agg, ch._zod.def);
   const bag = schema._zod.bag;
   if (bag.minimum !== void 0)
@@ -5138,8 +5243,8 @@ var tupleProcessor = (schema, ctx, _json, params) => {
   }) : null;
   let minItems = def.items.length;
   while (minItems > 0) {
-    const item2 = def.items[minItems - 1];
-    const optional2 = ctx.io === "input" ? inputOptin(item2) !== void 0 : item2._zod.optout === "optional";
+    const item = def.items[minItems - 1];
+    const optional2 = ctx.io === "input" ? inputOptin(item) !== void 0 : item._zod.optout === "optional";
     if (!optional2)
       break;
     minItems--;
@@ -5230,8 +5335,8 @@ function rewriteKeyNames(ctx) {
       bySchema.set(entry.schema, entry);
   }
   const rewrites = /* @__PURE__ */ new Map();
-  for (const record3 of pendingRecords.get(ctx) ?? []) {
-    const seen = ctx.seen.get(record3);
+  for (const record2 of pendingRecords.get(ctx) ?? []) {
+    const seen = ctx.seen.get(record2);
     const names = (seen?.def ?? seen?.schema)?.propertyNames;
     if (!names || names === true || rewrites.has(names))
       continue;
@@ -6167,6 +6272,18 @@ function union(options, params) {
     ...util_exports.normalizeParams(params)
   });
 }
+var ZodDiscriminatedUnion = /* @__PURE__ */ $constructor("ZodDiscriminatedUnion", (inst, def) => {
+  ZodUnion.init(inst, def);
+  $ZodDiscriminatedUnion.init(inst, def);
+});
+function discriminatedUnion(discriminator, options, params) {
+  return new ZodDiscriminatedUnion({
+    type: "union",
+    options,
+    discriminator,
+    ...util_exports.normalizeParams(params)
+  });
+}
 var ZodIntersection = /* @__PURE__ */ $constructor("ZodIntersection", (inst, def) => {
   $ZodIntersection.init(inst, def);
   ZodType.init(inst, def);
@@ -6246,6 +6363,27 @@ function _enum(values, params) {
   return new ZodEnum({
     type: "enum",
     entries,
+    ...util_exports.normalizeParams(params)
+  });
+}
+var ZodLiteral = /* @__PURE__ */ $constructor("ZodLiteral", (inst, def) => {
+  $ZodLiteral.init(inst, def);
+  ZodType.init(inst, def);
+  inst._zod.processJSONSchema = (ctx, json, params) => literalProcessor(inst, ctx, json, params);
+  inst.values = new Set(def.values);
+  Object.defineProperty(inst, "value", {
+    get() {
+      if (def.values.length > 1) {
+        throw new Error("This schema contains multiple valid literal values. Use `.values` instead.");
+      }
+      return def.values[0];
+    }
+  });
+});
+function literal(value, params) {
+  return new ZodLiteral({
+    type: "literal",
+    values: Array.isArray(value) ? value : [value],
     ...util_exports.normalizeParams(params)
   });
 }
@@ -6477,168 +6615,23 @@ function validator(name, schema) {
   };
 }
 
-// src/registry.ts
-var text = (max) => string2().max(max);
-var httpsUrl = string2().max(2048).refine((value) => {
-  try {
-    return new URL(value).protocol === "https:";
-  } catch {
-    return false;
-  }
-}, "must be an https URL");
-var timestamp = iso_exports.datetime({ offset: true });
-var date3 = union([timestamp, string2().regex(/^\d{4}-\d{2}-\d{2}$/, "must be an ISO date-time with an offset, or a date")]);
-var item = {
-  id: string2().min(1).max(128),
-  url: httpsUrl.optional(),
-  ask: text(200).optional()
-};
-var IMAGE_DATA_URI_MAX = 1024 * 1024 - 4 * 1024;
-var agenda = object({
-  items: array(
-    object({
-      ...item,
-      title: text(120),
-      start: date3,
-      end: date3.optional(),
-      allDay: boolean2().optional(),
-      location: text(120).optional(),
-      calendar: text(60).optional(),
-      joinUrl: httpsUrl.optional()
-    }).strict()
-  ).max(50),
-  rangeEnd: date3.optional()
-}).strict();
-var inbox = object({
-  unread: number2().int().nonnegative().nullable(),
-  unit: text(20).optional(),
-  label: text(60).optional(),
-  items: array(
-    object({
-      ...item,
-      title: text(120),
-      from: text(60).optional(),
-      preview: text(200).optional(),
-      at: timestamp,
-      count: number2().int().nonnegative().optional(),
-      important: boolean2().optional()
-    }).strict()
-  ).max(30)
-}).strict();
-var metric = object({
-  label: text(40),
-  value: union([number2().finite(), text(20)]),
-  unit: text(10).optional(),
-  delta: object({
-    value: number2().finite(),
-    direction: _enum(["up", "down", "flat"]),
-    good: boolean2().optional()
-  }).strict().optional(),
-  spark: array(number2().finite()).max(48).optional()
-}).strict();
-var list = object({
-  items: array(
-    object({
-      id: item.id,
-      text: text(200),
-      done: boolean2().optional(),
-      note: text(200).optional(),
-      due: date3.optional()
-    }).strict()
-  ).max(50),
-  editable: boolean2()
-}).strict();
-var progress = object({
-  label: text(60),
-  value: number2().nonnegative(),
-  max: number2().positive(),
-  steps: array(object({ label: text(40), done: boolean2() }).strict()).max(12).optional(),
-  eta: timestamp.optional()
-}).strict().refine((value) => value.value <= value.max, { message: "value must not exceed max", path: ["value"] });
-var note = object({ markdown: text(16 * 1024) }).strict();
-var links = object({
-  items: array(
-    object({
-      ...item,
-      title: text(60),
-      url: httpsUrl,
-      hint: text(60).optional()
-    }).strict()
-  ).max(12)
-}).strict();
-var countdown = object({
-  label: text(60),
-  target: timestamp,
-  style: _enum(["relative", "timer"])
-}).strict();
-var image = object({
-  url: httpsUrl.optional(),
-  dataUri: string2().max(IMAGE_DATA_URI_MAX).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/, "must be a base64 data URI of a png, jpeg or webp image").optional(),
-  alt: string2().min(1).max(200),
-  caption: text(120).optional()
-}).strict().refine((value) => value.url === void 0 !== (value.dataUri === void 0), { message: "give exactly one of url and dataUri" });
-var thread = object({
-  subject: text(200),
-  messages: array(
-    object({
-      ...item,
-      from: text(120),
-      at: timestamp,
-      body: text(4e3),
-      quoted: text(4e3).optional()
-    }).strict()
-  ).min(1).max(50)
-}).strict();
-var table = object({
-  columns: array(object({ key: string2().regex(/^[A-Za-z0-9_-]{1,40}$/), label: text(40) }).strict()).min(1).max(8),
-  rows: array(record(string2(), union([text(200), number2().finite(), boolean2(), _null3()]))).max(100)
-}).strict();
-var record2 = object({
-  title: text(120),
-  fields: array(object({ label: text(60), value: text(400) }).strict()).min(1).max(24)
-}).strict();
-var OUTPUTS = {
-  agenda: validator("output.agenda", agenda),
-  inbox: validator("output.inbox", inbox),
-  metric: validator("output.metric", metric),
-  list: validator("output.list", list),
-  progress: validator("output.progress", progress),
-  note: validator("output.note", note),
-  links: validator("output.links", links),
-  countdown: validator("output.countdown", countdown),
-  image: validator("output.image", image),
-  thread: validator("output.thread", thread),
-  table: validator("output.table", table),
-  record: validator("output.record", record2)
-};
-var OUTPUT_NAMES = Object.keys(OUTPUTS);
-function isOutputName(name) {
-  return typeof name === "string" && Object.hasOwn(OUTPUTS, name);
-}
-function outputValidator(name) {
-  return isOutputName(name) ? OUTPUTS[name] : void 0;
-}
-function checkOutput(name, data) {
-  const found = outputValidator(name);
-  if (!found) return { ok: false, problems: [`"${name}" is not a registered output (${OUTPUT_NAMES.join(", ")})`] };
-  return found.check(data);
-}
-
 export {
   string2 as string,
   number2 as number,
+  int,
   boolean2 as boolean,
+  _null3 as _null,
   unknown,
+  never,
   array,
   object,
   looseObject,
+  union,
+  discriminatedUnion,
   record,
   _enum,
+  literal,
+  iso_exports,
   problemsOf,
-  IMAGE_DATA_URI_MAX,
-  OUTPUTS,
-  OUTPUT_NAMES,
-  isOutputName,
-  outputValidator,
-  checkOutput
+  validator
 };

@@ -4,5 +4,6 @@
  */
 import type { Validator } from "./internal/checked.ts"
 import { OUTPUTS } from "./registry.ts"
+import { SOURCES_SCHEMA } from "./schema.ts"
 
-export const SCHEMAS: readonly Validator<unknown>[] = [...Object.values(OUTPUTS)]
+export const SCHEMAS: readonly Validator<unknown>[] = [SOURCES_SCHEMA, ...Object.values(OUTPUTS)]

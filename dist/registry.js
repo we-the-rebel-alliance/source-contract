@@ -6,7 +6,8 @@ import {
   checkOutput,
   isOutputName,
   outputValidator
-} from "./chunks/chunk-64DASBTN.js";
+} from "./chunks/chunk-UGUA267L.js";
+import "./chunks/chunk-6RDMPYYW.js";
 import "./chunks/chunk-HLVAKAYG.js";
 export {
   IMAGE_DATA_URI_MAX,

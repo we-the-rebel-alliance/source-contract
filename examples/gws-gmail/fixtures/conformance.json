@@ -1,0 +1,510 @@
+{
+  "$comment": "Sanitised from the off-line gws pilot fixture: every address, message and id is invented. Recorded as contract-version-1 page results. The kit replays each case by its input exactly.",
+  "plugin": "@joe-broadhead/opencode-gws",
+  "account": "sam.rivera@example.com",
+  "tools": [
+    {
+      "id": "events_list",
+      "readOnly": true
+    },
+    {
+      "id": "read",
+      "readOnly": true
+    }
+  ],
+  "sources": {
+    "gws.gmail": {
+      "cases": [
+        {
+          "name": "a page of messages, oldest first",
+          "input": {
+            "source": "gmail",
+            "account": "sam.rivera@example.com",
+            "limit": 10
+          },
+          "expect": "page",
+          "asserts": [
+            {
+              "action": "gws.events_list",
+              "resource": "*"
+            },
+            {
+              "action": "gws.read",
+              "resource": "sam.rivera@example.com:gmail.users.history.list"
+            },
+            {
+              "action": "gws.read",
+              "resource": "sam.rivera@example.com:gmail.users.messages.list"
+            },
+            {
+              "action": "gws.read",
+              "resource": "sam.rivera@example.com:gmail.users.messages.get"
+            }
+          ],
+          "answer": {
+            "source": "gws.gmail",
+            "plugin": "@joe-broadhead/opencode-gws",
+            "account": "sam.rivera@example.com",
+            "owner": {
+              "id": "mailto:sam.rivera@example.com",
+              "label": "Sam Rivera"
+            },
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "trust": "untrusted",
+            "events": [
+              {
+                "kind": "message",
+                "external_id": "18f0000000000001",
+                "occurred_at": "2026-11-01T09:00:00.000Z",
+                "thread": "gmail-thread:18f0000000000001",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "mailto:ama.mensah@example.com",
+                    "label": "Ama Mensah"
+                  },
+                  {
+                    "role": "to",
+                    "id": "mailto:sam.rivera@example.com",
+                    "label": "Sam Rivera"
+                  },
+                  {
+                    "role": "cc",
+                    "id": "mailto:jordan.lee@example.org",
+                    "label": "Lee, Jordan"
+                  }
+                ],
+                "title": "Q4 numbers",
+                "text": "Hi Sam,\n\nCan you send the Q4 numbers by Friday? Finance needs them for the board pack.\n\nThanks,\nAma",
+                "url": "https://mail.google.com/mail/u/0/#all/18f0000000000001",
+                "labels": [
+                  "INBOX",
+                  "IMPORTANT",
+                  "CATEGORY_PERSONAL",
+                  "UNREAD"
+                ],
+                "hash": "sha256:89bfcbd5823046f08e7dbd62220a037fd026192a62e3f4cb32087e4dc45c5402"
+              },
+              {
+                "kind": "message",
+                "external_id": "18f0000000000002",
+                "occurred_at": "2026-11-01T10:30:00.000Z",
+                "thread": "gmail-thread:18f0000000000001",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "mailto:sam.rivera@example.com",
+                    "label": "Sam Rivera"
+                  },
+                  {
+                    "role": "to",
+                    "id": "mailto:ama.mensah@example.com"
+                  },
+                  {
+                    "role": "bcc",
+                    "id": "mailto:records@example.com"
+                  }
+                ],
+                "title": "Re: Q4 numbers",
+                "text": "Yes, I'll send them Wednesday.\n\nSent from my phone",
+                "url": "https://mail.google.com/mail/u/0/#all/18f0000000000001",
+                "labels": [
+                  "SENT"
+                ],
+                "hash": "sha256:16d99048ed81aed09f3aae9e9f91ed6e6a2578872ebd44271d9911b8066cc815"
+              },
+              {
+                "kind": "message",
+                "external_id": "18f0000000000008",
+                "occurred_at": "2026-11-01T15:00:00.000Z",
+                "thread": "gmail-thread:18f0000000000008",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "mailto:ama.mensah@example.com",
+                    "label": "Ama Mensah"
+                  }
+                ],
+                "title": "Lunch?",
+                "text": "Free for lunch on Thursday? I'll book a table & send the address.",
+                "url": "https://mail.google.com/mail/u/0/#all/18f0000000000008",
+                "labels": [
+                  "INBOX",
+                  "STARRED"
+                ],
+                "hash": "sha256:ab3e1089963fd3dbdbe19c06048a30b0df918cfeacba9a07d0bb67d03b47e266"
+              }
+            ],
+            "cursor": "gmail:sam.rivera@example.com:history:1009",
+            "more": false,
+            "refused": [
+              {
+                "external_id": "18f0000000000005",
+                "reason": "instruction-shaped text from another sender"
+              }
+            ],
+            "failed": []
+          }
+        },
+        {
+          "name": "a cursor this source did not issue is refused",
+          "input": {
+            "source": "gmail",
+            "account": "sam.rivera@example.com",
+            "cursor": "another-plugin:cursor"
+          },
+          "expect": {
+            "refuses": "CURSOR_INVALID"
+          },
+          "refuses": "CURSOR_INVALID: this cursor was not issued by gws for this account. Next step: read again without a cursor to restart the window.",
+          "asserts": []
+        },
+        {
+          "name": "one message that could not be read holds the cursor back",
+          "input": {
+            "source": "gmail",
+            "account": "sam.rivera@example.com",
+            "cursor": "gmail:sam.rivera@example.com:history:1009:held"
+          },
+          "expect": "page",
+          "asserts": [
+            {
+              "action": "gws.read",
+              "resource": "sam.rivera@example.com:gmail.users.messages.get"
+            }
+          ],
+          "answer": {
+            "source": "gws.gmail",
+            "plugin": "@joe-broadhead/opencode-gws",
+            "account": "sam.rivera@example.com",
+            "owner": {
+              "id": "mailto:sam.rivera@example.com",
+              "label": "Sam Rivera"
+            },
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "trust": "untrusted",
+            "events": [
+              {
+                "kind": "message",
+                "external_id": "18f0000000000001",
+                "occurred_at": "2026-11-01T09:00:00.000Z",
+                "thread": "gmail-thread:18f0000000000001",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "mailto:ama.mensah@example.com",
+                    "label": "Ama Mensah"
+                  },
+                  {
+                    "role": "to",
+                    "id": "mailto:sam.rivera@example.com",
+                    "label": "Sam Rivera"
+                  },
+                  {
+                    "role": "cc",
+                    "id": "mailto:jordan.lee@example.org",
+                    "label": "Lee, Jordan"
+                  }
+                ],
+                "title": "Q4 numbers",
+                "text": "Hi Sam,\n\nCan you send the Q4 numbers by Friday? Finance needs them for the board pack.\n\nThanks,\nAma",
+                "url": "https://mail.google.com/mail/u/0/#all/18f0000000000001",
+                "labels": [
+                  "INBOX",
+                  "IMPORTANT",
+                  "CATEGORY_PERSONAL",
+                  "UNREAD"
+                ],
+                "hash": "sha256:89bfcbd5823046f08e7dbd62220a037fd026192a62e3f4cb32087e4dc45c5402"
+              },
+              {
+                "kind": "message",
+                "external_id": "18f0000000000002",
+                "occurred_at": "2026-11-01T10:30:00.000Z",
+                "thread": "gmail-thread:18f0000000000001",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "mailto:sam.rivera@example.com",
+                    "label": "Sam Rivera"
+                  },
+                  {
+                    "role": "to",
+                    "id": "mailto:ama.mensah@example.com"
+                  },
+                  {
+                    "role": "bcc",
+                    "id": "mailto:records@example.com"
+                  }
+                ],
+                "title": "Re: Q4 numbers",
+                "text": "Yes, I'll send them Wednesday.\n\nSent from my phone",
+                "url": "https://mail.google.com/mail/u/0/#all/18f0000000000001",
+                "labels": [
+                  "SENT"
+                ],
+                "hash": "sha256:16d99048ed81aed09f3aae9e9f91ed6e6a2578872ebd44271d9911b8066cc815"
+              },
+              {
+                "kind": "message",
+                "external_id": "18f0000000000008",
+                "occurred_at": "2026-11-01T15:00:00.000Z",
+                "thread": "gmail-thread:18f0000000000008",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "mailto:ama.mensah@example.com",
+                    "label": "Ama Mensah"
+                  }
+                ],
+                "title": "Lunch?",
+                "text": "Free for lunch on Thursday? I'll book a table & send the address.",
+                "url": "https://mail.google.com/mail/u/0/#all/18f0000000000008",
+                "labels": [
+                  "INBOX",
+                  "STARRED"
+                ],
+                "hash": "sha256:ab3e1089963fd3dbdbe19c06048a30b0df918cfeacba9a07d0bb67d03b47e266"
+              }
+            ],
+            "cursor": "gmail:sam.rivera@example.com:history:1009:held",
+            "more": true,
+            "refused": [
+              {
+                "external_id": "18f0000000000005",
+                "reason": "instruction-shaped text from another sender"
+              }
+            ],
+            "failed": [
+              {
+                "external_id": "18f0000000000007",
+                "reason": "the provider answered RATE_LIMITED for this message"
+              }
+            ]
+          }
+        },
+        {
+          "name": "a cursor whose history Gmail no longer keeps is CURSOR_EXPIRED",
+          "input": {
+            "source": "gmail",
+            "account": "sam.rivera@example.com",
+            "cursor": "gmail:sam.rivera@example.com:history:0001"
+          },
+          "expect": "expired",
+          "refuses": "CURSOR_EXPIRED: Gmail no longer keeps the history this cursor names. Next step: read again with since to restart the window.",
+          "since": "2026-10-13T09:00:00.000Z",
+          "asserts": []
+        },
+        {
+          "name": "the restarted window reads on",
+          "input": {
+            "since": "2026-10-13T09:00:00.000Z"
+          },
+          "expect": "page",
+          "asserts": [
+            {
+              "action": "gws.read",
+              "resource": "sam.rivera@example.com:gmail.users.history.list"
+            }
+          ],
+          "answer": {
+            "source": "gws.gmail",
+            "plugin": "@joe-broadhead/opencode-gws",
+            "account": "sam.rivera@example.com",
+            "owner": {
+              "id": "mailto:sam.rivera@example.com",
+              "label": "Sam Rivera"
+            },
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "trust": "untrusted",
+            "events": [
+              {
+                "kind": "message",
+                "external_id": "18f0000000000001",
+                "occurred_at": "2026-11-01T09:00:00.000Z",
+                "thread": "gmail-thread:18f0000000000001",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "mailto:ama.mensah@example.com",
+                    "label": "Ama Mensah"
+                  },
+                  {
+                    "role": "to",
+                    "id": "mailto:sam.rivera@example.com",
+                    "label": "Sam Rivera"
+                  },
+                  {
+                    "role": "cc",
+                    "id": "mailto:jordan.lee@example.org",
+                    "label": "Lee, Jordan"
+                  }
+                ],
+                "title": "Q4 numbers",
+                "text": "Hi Sam,\n\nCan you send the Q4 numbers by Friday? Finance needs them for the board pack.\n\nThanks,\nAma",
+                "url": "https://mail.google.com/mail/u/0/#all/18f0000000000001",
+                "labels": [
+                  "INBOX",
+                  "IMPORTANT",
+                  "CATEGORY_PERSONAL",
+                  "UNREAD"
+                ],
+                "hash": "sha256:89bfcbd5823046f08e7dbd62220a037fd026192a62e3f4cb32087e4dc45c5402"
+              },
+              {
+                "kind": "message",
+                "external_id": "18f0000000000002",
+                "occurred_at": "2026-11-01T10:30:00.000Z",
+                "thread": "gmail-thread:18f0000000000001",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "mailto:sam.rivera@example.com",
+                    "label": "Sam Rivera"
+                  },
+                  {
+                    "role": "to",
+                    "id": "mailto:ama.mensah@example.com"
+                  },
+                  {
+                    "role": "bcc",
+                    "id": "mailto:records@example.com"
+                  }
+                ],
+                "title": "Re: Q4 numbers",
+                "text": "Yes, I'll send them Wednesday.\n\nSent from my phone",
+                "url": "https://mail.google.com/mail/u/0/#all/18f0000000000001",
+                "labels": [
+                  "SENT"
+                ],
+                "hash": "sha256:16d99048ed81aed09f3aae9e9f91ed6e6a2578872ebd44271d9911b8066cc815"
+              },
+              {
+                "kind": "message",
+                "external_id": "18f0000000000008",
+                "occurred_at": "2026-11-01T15:00:00.000Z",
+                "thread": "gmail-thread:18f0000000000008",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "mailto:ama.mensah@example.com",
+                    "label": "Ama Mensah"
+                  }
+                ],
+                "title": "Lunch?",
+                "text": "Free for lunch on Thursday? I'll book a table & send the address.",
+                "url": "https://mail.google.com/mail/u/0/#all/18f0000000000008",
+                "labels": [
+                  "INBOX",
+                  "STARRED"
+                ],
+                "hash": "sha256:ab3e1089963fd3dbdbe19c06048a30b0df918cfeacba9a07d0bb67d03b47e266"
+              }
+            ],
+            "cursor": "gmail:sam.rivera@example.com:history:1010",
+            "more": false,
+            "refused": [
+              {
+                "external_id": "18f0000000000005",
+                "reason": "instruction-shaped text from another sender"
+              }
+            ],
+            "failed": []
+          }
+        }
+      ],
+      "probe": {
+        "input": {
+          "source": "gws.gmail",
+          "account": "sam.rivera@example.com"
+        },
+        "asserts": [
+          {
+            "action": "gws.events_list",
+            "resource": "*"
+          },
+          {
+            "action": "gws.read",
+            "resource": "sam.rivera@example.com:gmail.users.getProfile"
+          }
+        ],
+        "answer": {
+          "account": "sam.rivera@example.com",
+          "owner": {
+            "id": "mailto:sam.rivera@example.com",
+            "label": "Sam Rivera"
+          },
+          "scopes": []
+        }
+      },
+      "details": [
+        {
+          "id": "gws.gmail.message",
+          "scope": {},
+          "event": {
+            "external_id": "18f0000000000001"
+          },
+          "asserts": [
+            {
+              "action": "gws.read",
+              "resource": "sam.rivera@example.com:gmail.users.messages.get"
+            }
+          ],
+          "answer": {
+            "source": "gws.gmail",
+            "plugin": "@joe-broadhead/opencode-gws",
+            "account": "sam.rivera@example.com",
+            "owner": {
+              "id": "mailto:sam.rivera@example.com",
+              "label": "Sam Rivera"
+            },
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "trust": "untrusted",
+            "events": [
+              {
+                "kind": "message",
+                "external_id": "18f0000000000001",
+                "occurred_at": "2026-11-01T09:00:00.000Z",
+                "thread": "gmail-thread:18f0000000000001",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "mailto:ama.mensah@example.com",
+                    "label": "Ama Mensah"
+                  },
+                  {
+                    "role": "to",
+                    "id": "mailto:sam.rivera@example.com",
+                    "label": "Sam Rivera"
+                  },
+                  {
+                    "role": "cc",
+                    "id": "mailto:jordan.lee@example.org",
+                    "label": "Lee, Jordan"
+                  }
+                ],
+                "title": "Q4 numbers",
+                "text": "Hi Sam,\n\nCan you send the Q4 numbers by Friday? Finance needs them for the board pack.\n\nThanks,\nAma",
+                "url": "https://mail.google.com/mail/u/0/#all/18f0000000000001",
+                "labels": [
+                  "INBOX",
+                  "IMPORTANT",
+                  "CATEGORY_PERSONAL",
+                  "UNREAD"
+                ],
+                "hash": "sha256:89bfcbd5823046f08e7dbd62220a037fd026192a62e3f4cb32087e4dc45c5402"
+              }
+            ],
+            "cursor": "",
+            "more": false,
+            "refused": [],
+            "failed": []
+          }
+        }
+      ],
+      "identity": [
+        "gmail.users.getProfile"
+      ]
+    }
+  }
+}

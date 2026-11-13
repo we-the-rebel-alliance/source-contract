@@ -48,9 +48,12 @@ const notices = [...bundled].sort().map((name) => {
   if (!file) throw new Error(`build: ${name} is bundled but has no licence file`)
   return `## ${name} ${own.version} (${own.license})\n\n${readFileSync(file, "utf8").trim()}\n`
 })
+// The package's own bundled data, whose licence is not a package's: the conformance kit carries the Public Suffix List.
+const own = join(root, "scripts", "public-suffix-notice.md")
+const ownNotice = existsSync(own) ? `${readFileSync(own, "utf8").trimEnd()}\n` : ""
 writeFileSync(
   join(dist, "THIRD-PARTY-NOTICES.md"),
-  `# Bundled packages\n\ndist/ bundles these packages, so an install needs none of them.\n\n${notices.join("\n")}`,
+  `# Bundled packages\n\ndist/ bundles these packages and this data, so an install needs none of them.\n\n${notices.join("\n")}${ownNotice === "" ? "" : `\n${ownNotice}`}`,
 )
 
 // The type declarations, then only those an export reaches.

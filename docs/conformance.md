@@ -2,7 +2,7 @@
 
 A plugin proves it keeps the contract by running the conformance kit in its own CI and attaching the report to each Release. A project's catalogue lists a source plugin only with a passing report for its pinned version.
 
-The kit is the `conformance` module, which Memory contributes (with the family's `eventsListConformance`), and it ships with every Release as one file, `source-contract-conformance-<version>.mjs`, which needs nothing installed. Until it lands, this page describes what it checks and what is already checked.
+The kit is the `conformance` module, contributed by Memory (#13), with the family's `eventsListConformance` in `events` (#7). It ships with every Release as one file, `source-contract-conformance-<version>.mjs`, which needs nothing installed.
 
 ## What it checks
 
@@ -26,14 +26,15 @@ The draft's ten checks, and Memory's additions:
 
 ## Running it
 
-In a plugin, once the kit is in a Release:
+The kit is a library: a plugin calls it from its own tests, with its own fixtures, and fails its check on any problem.
 
-```sh
-node source-contract-conformance-<version>.mjs <your plugin directory>
+```js
+import { assertDeclaration, assertConformance } from "@we-the-rebel-alliance/source-contract/conformance"
+// or, without installing the package: import { … } from "./source-contract-conformance-<version>.mjs"
 ```
 
-or, with the package pinned, from a test that calls the kit's functions with your fixtures. The fixtures are your own offline answers: a fixture answers each call, and the recording session refuses any action the declaration does not hold.
+`assertDeclaration` checks the `sources` key (the schema, then the rules a schema cannot express). `assertConformance` runs each source through the checks above, with a fixture that answers each call. The recording permission context refuses any action the declaration does not hold, and reports any grant nothing asserted. `examples/*/fixtures/conformance.json` shows the fixture format, and `scripts/examples.ts` replays one.
 
 ## In this repository
 
-`npm run conformance:self-test` runs on every pull request. It reads each plugin under `examples/` as a consumer finds it on disk (`readInstalledDescriptor` from `dist/`), and, once the kit lands, runs the kit over each, with the family's nine plugins' fixtures and Memory's gws and Slack fixtures.
+`npm run conformance:self-test` runs on every pull request. It reads each plugin under `examples/` as a consumer finds it on disk (`readInstalledDescriptor` from `dist/`), then runs the kit over each with its recorded fixture, from `dist/` as it ships. The family's nine plugins' recorded `events_list` runs are checked by `test/fixtures.test.ts`.

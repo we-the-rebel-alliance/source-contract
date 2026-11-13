@@ -85,20 +85,20 @@ describe("the hash", () => {
 
 describe("the frame", () => {
   test("requires permission.operations", () => {
-    assert.match(problemsOf(withItem((item) => (item.permission.operations = []))).join("\n"), /must name at least one operation/)
+    assert.match(problemsOf(withItem((item) => (item.permission.operations = []))).join("\n"), /items\[0\]\.permission\.operations/)
     assert.match(problemsOf(withItem((item) => delete item.permission.operations)).join("\n"), /permission\.operations/)
   })
 
   test("requires a snapshot's output to be registered, and an events source's event kind", () => {
     assert.match(problemsOf(withItem((item) => (item.output = "weather"), 1)).join("\n"), /"weather" is not a registered output/)
-    assert.match(problemsOf(withItem((item) => delete item.output, 1)).join("\n"), /must name its output/)
-    assert.match(problemsOf(withItem((item) => delete item.reads)).join("\n"), /which event kind it reads/)
-    assert.match(problemsOf(withItem((item) => (item.output = "agenda"))).join("\n"), /only a snapshot source has an output/)
+    assert.match(problemsOf(withItem((item) => delete item.output, 1)).join("\n"), /items\[1\]\.output/)
+    assert.match(problemsOf(withItem((item) => delete item.reads)).join("\n"), /items\[0\]\.reads/)
+    assert.match(problemsOf(withItem((item) => (item.output = "agenda"))).join("\n"), /items\[0\]\.output: an events source has no output/)
   })
 
   test("caps maxBytes at 1 MB and needs price units for a billed source", () => {
-    assert.match(problemsOf(withItem((item) => (item.maxBytes = 2 * 1024 * 1024))).join("\n"), /at most 1048576/)
-    assert.match(problemsOf(withItem((item) => (item.cost = { class: "billed" }))).join("\n"), /must state its price units/)
+    assert.match(problemsOf(withItem((item) => (item.maxBytes = 2 * 1024 * 1024))).join("\n"), /items\[0\]\.maxBytes.*1048576/)
+    assert.match(problemsOf(withItem((item) => (item.cost = { class: "billed" }))).join("\n"), /items\[0\]\.cost\.units/)
     assert.deepEqual(problemsOf(withItem((item) => (item.cost = { class: "billed", units: [{ per: "post", usd: 0.005 }], probe: { per: "call", usd: 0.01 } }))), [])
   })
 
@@ -120,12 +120,12 @@ describe("the frame", () => {
     const twice = exampleSources("gws")
     twice.items[1].id = "gws.gmail"
     assert.match(problemsOf(twice).join("\n"), /"gws.gmail" is declared twice/)
-    assert.match(problemsOf({ ...exampleSources("gws"), contractVersion: 2 }).join("\n"), /contract version this package reads/)
-    assert.match(problemsOf(withItem((item) => (item.id = "Gmail"))).join("\n"), /dotted and lowercase/)
+    assert.match(problemsOf({ ...exampleSources("gws"), contractVersion: 2 }).join("\n"), /sources\.contractVersion/)
+    assert.match(problemsOf(withItem((item) => (item.id = "Gmail"))).join("\n"), /items\[0\]\.id: must be a dotted source id/)
     assert.deepEqual(problemsOf(undefined), ["sources: Invalid input: expected object, received undefined"])
   })
 
-  test("leaves keys it does not know to the full schema", () => {
-    assert.deepEqual(problemsOf(withItem((item) => (item.title = "Gmail"))), [])
+  test("runs Memory's schema first, which refuses a key it does not define", () => {
+    assert.match(problemsOf(withItem((item) => (item.title = "Gmail"))).join("\n"), /Unrecognized key: "title"/)
   })
 })

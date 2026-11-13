@@ -121,6 +121,17 @@ describe("read a snapshot", () => {
     assert.equal(fake.closed(), 1)
   })
 
+  test("reads a plugin's INPUT_INVALID or SOURCE_UNKNOWN as SCHEMA_VIOLATION, never as a reason to try again (D3)", async () => {
+    for (const message of ["INPUT_INVALID: the input is invalid", "EVENTS_SOURCE_UNKNOWN: this plugin lists one source, gws", "SOURCE_UNKNOWN: no such source. Next step: Pass gmail."]) {
+      const outcome = await read(fakeHost(() => Promise.reject(new Error(message))).host, todayRequest())
+      assert.equal(outcome.ok ? "ok" : outcome.failure.code, "SCHEMA_VIOLATION", message)
+      if (outcome.ok) continue
+      assert.doesNotMatch(outcome.failure.next, /Try again later/)
+    }
+    const own = await read(fakeHost(() => Promise.reject(new Error("SOURCE_UNKNOWN: no such source. Next step: Pass gmail."))).host, todayRequest())
+    assert.equal(own.ok ? "" : own.failure.next, "Pass gmail.")
+  })
+
   test("a source that asserts more than it declares is refused by the fence", async () => {
     const fake = fakeHost(() => snapshot, () => [["gws.read", `${ana}:gmail.users.messages.get`]])
     const outcome = await read(fake.host, todayRequest())

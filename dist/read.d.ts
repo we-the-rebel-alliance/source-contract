@@ -99,8 +99,26 @@ export type ReadOutcome = {
     readonly ok: false;
     readonly failure: ReadFailure;
 };
+/**
+ * The checks before any call, whoever makes it: the source is declared, the person has not turned it off, the grant is
+ * this consumer's for the descriptor as installed, the scope is within the grant, the inputs suit the source's kind,
+ * and `pick` names paths of its output. The source and the scope to read when they pass.
+ */
+export declare function checkReadRequest(request: ReadRequest): {
+    readonly source: SourceItem;
+    readonly scope?: Readonly<Record<string, readonly string[]>>;
+} | ReadOutcome;
 /** Reads a source under a grant, in a session fenced by the grant's rules. Never throws for a refused or failed read. */
 export declare function read(host: ReadHost, request: ReadRequest): Promise<ReadOutcome>;
+/**
+ * A source's answer, checked as the contract says and picked: the account, `trust: "untrusted"`, the size against
+ * `maxBytes`, an events page's shape or a snapshot's output, then `pick`. The same checks whoever made the call: `read`
+ * embedded, or a host's broker (`broker-client`), so a broker never needs to be trusted for shape.
+ */
+export declare function acceptAnswer(source: SourceItem, account: string, answer: unknown, options?: {
+    readonly limit?: number;
+    readonly pick?: readonly string[];
+}): ReadOutcome;
 /** A detail read of one event (design §2.2 `details`). */
 export interface DetailRequest {
     readonly installed: InstalledDescriptor;

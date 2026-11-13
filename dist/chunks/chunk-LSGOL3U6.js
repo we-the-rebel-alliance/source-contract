@@ -62,7 +62,7 @@ function failureFromError(error) {
 var plain = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var refused = (code, what, next) => ({ ok: false, failure: failure(code, what, next) });
 var bytes = (value) => new TextEncoder().encode(JSON.stringify(value)).length;
-function prepare(request) {
+function checkReadRequest(request) {
   const { installed, grant } = request;
   const source = findSource(installed.sources, request.source);
   if (!source) return refused("UNAVAILABLE", `${installed.package} ${installed.version} declares no source ${request.source}`, "Check the source id against the installed plugin's sources.");
@@ -75,10 +75,26 @@ function prepare(request) {
   if (!grantCovers(grant, { source: source.id, account: grant.account, ...scope === void 0 ? {} : { scope } })) {
     return refused("PERMISSION_DENIED", `the read asks for more of ${source.id} than the person granted`, "Read within the granted scope, or ask the person to widen it.");
   }
-  const input = { ...source.input ?? {}, account: grant.account };
-  if (scope !== void 0) input["scope"] = scope;
   if (source.kind === "events") {
     if (request.params !== void 0 || request.pick !== void 0) return refused("SCHEMA_VIOLATION", "params and pick are for a snapshot source", "Pass cursor, since and limit to an events source.");
+  } else {
+    if (request.cursor !== void 0 || request.since !== void 0 || request.limit !== void 0) {
+      return refused("SCHEMA_VIOLATION", "cursor, since and limit are for an events source", "Pass params and pick to a snapshot source.");
+    }
+    if (request.pick !== void 0) {
+      const problems = pickProblemsForOutput(source.output ?? "", request.pick);
+      if (problems.length > 0) return refused("SCHEMA_VIOLATION", problems.join("; "), "Pick only paths of the source's output schema.");
+    }
+  }
+  return { source, ...scope === void 0 ? {} : { scope } };
+}
+function prepare(request) {
+  const checked = checkReadRequest(request);
+  if ("ok" in checked) return checked;
+  const { source, scope } = checked;
+  const input = { ...source.input ?? {}, account: request.grant.account };
+  if (scope !== void 0) input["scope"] = scope;
+  if (source.kind === "events") {
     if (request.since !== void 0) {
       const since = resolveSince(request.since, request.context);
       if (!since.ok) return refused("SCHEMA_VIOLATION", since.problems.join("; "), "Pass since as a relative time such as -7d, or an ISO date-time.");
@@ -88,15 +104,8 @@ function prepare(request) {
     if (request.limit !== void 0) input["limit"] = request.limit;
     return { source, input };
   }
-  if (request.cursor !== void 0 || request.since !== void 0 || request.limit !== void 0) {
-    return refused("SCHEMA_VIOLATION", "cursor, since and limit are for an events source", "Pass params and pick to a snapshot source.");
-  }
   const params = resolveParams(source.params, request.params, request.context);
   if (!params.ok) return refused("SCHEMA_VIOLATION", params.problems.join("; "), "Pass only the params the source declares, as its descriptor describes them.");
-  if (request.pick !== void 0) {
-    const problems = pickProblemsForOutput(source.output ?? "", request.pick);
-    if (problems.length > 0) return refused("SCHEMA_VIOLATION", problems.join("; "), "Pick only paths of the source's output schema.");
-  }
   return { source, input: { ...input, ...params.value } };
 }
 function checkAnswer(source, account, answer) {
@@ -132,29 +141,39 @@ async function read(host, request) {
     `${request.consumer} reads ${source.id}`
   );
   if (!called.ok) return { ok: false, failure: called.failure };
-  const problem = checkAnswer(source, request.grant.account, called.answer);
+  return acceptAnswer(source, request.grant.account, called.answer, {
+    ...request.limit === void 0 ? {} : { limit: request.limit },
+    ...request.pick === void 0 ? {} : { pick: request.pick }
+  });
+}
+function acceptAnswer(source, account, answer, options = {}) {
+  const problem = checkAnswer(source, account, answer);
   if (problem) return { ok: false, failure: problem };
-  const answer = called.answer;
+  const value = answer;
   if (source.kind === "events") {
-    if (!Array.isArray(answer["events"]) || typeof answer["cursor"] !== "string" || typeof answer["more"] !== "boolean") {
+    if (!Array.isArray(value["events"]) || typeof value["cursor"] !== "string" || typeof value["more"] !== "boolean") {
       return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s page has no events list, cursor or more`, "Report it to the plugin's maintainers.") };
     }
-    return { ok: true, kind: "events", page: answer };
+    const limit = options.limit ?? 500;
+    if (value["events"].length > limit) {
+      return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s page has ${value["events"].length} events, over the limit of ${limit}`, "Report it to the plugin's maintainers.") };
+    }
+    return { ok: true, kind: "events", page: value };
   }
-  const checked = checkOutput(source.output ?? "", answer["data"]);
+  const checked = checkOutput(source.output ?? "", value["data"]);
   if (!checked.ok) return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s data breaks the ${source.output} schema: ${checked.problems.slice(0, 3).join("; ")}`, "Report it to the plugin's maintainers.") };
-  if (typeof answer["asOf"] !== "string" || !Number.isFinite(Date.parse(answer["asOf"]))) {
+  if (typeof value["asOf"] !== "string" || !Number.isFinite(Date.parse(value["asOf"]))) {
     return { ok: false, failure: failure("SCHEMA_VIOLATION", `${source.id}'s snapshot has no asOf time`, "Report it to the plugin's maintainers.") };
   }
-  let picked = answer["data"];
-  if (request.pick !== void 0) {
-    const kept = pick(picked, request.pick);
+  let picked = value["data"];
+  if (options.pick !== void 0) {
+    const kept = pick(picked, options.pick);
     picked = kept.ok ? kept.data : {};
   }
   return {
     ok: true,
     kind: "snapshot",
-    snapshot: { data: picked, asOf: answer["asOf"], ...answer["cost"] === void 0 ? {} : { cost: answer["cost"] }, trust: "untrusted" }
+    snapshot: { data: picked, asOf: value["asOf"], ...value["cost"] === void 0 ? {} : { cost: value["cost"] }, trust: "untrusted" }
   };
 }
 var THREAD = /^[a-z][a-z0-9+.-]*-thread:([^:\s]+):([^:\s]+)$/;
@@ -224,7 +243,10 @@ async function probe(host, request) {
 }
 
 export {
+  failureFromError,
+  checkReadRequest,
   read,
+  acceptAnswer,
   detailInput,
   readDetail,
   probe

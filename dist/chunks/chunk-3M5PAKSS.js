@@ -39,7 +39,11 @@ function sessionRules(source, grant) {
   if (problem) return { ok: false, problems: [problem] };
   const method = methodAction(source);
   if (method === void 0) return { ok: false, problems: [`${source.id} names no action for its method`] };
-  return fenced([allow(method, "*"), ...source.permission.operations.map((operation) => operationRule(source, operation, grant.account))]);
+  const declared = source.permission.rules;
+  if (declared !== void 0) return fenced([allow(method, "*"), ...declared.map((rule) => allow(rule.action, rule.resource))]);
+  const operations = source.permission.operations ?? [];
+  if (operations.length === 0) return { ok: false, problems: [`${source.id} declares neither operations nor rules`] };
+  return fenced([allow(method, "*"), ...operations.map((operation) => operationRule(source, operation, grant.account))]);
 }
 function detailRules(source, detailId, grant) {
   if (!source.details?.some((entry) => entry.id === detailId)) return { ok: false, problems: [`${source.id} declares no detail read ${detailId}`] };
@@ -50,8 +54,6 @@ function probeRules(source, account, identityOperations, probeAction) {
   if (problem) return { ok: false, problems: [problem] };
   const method = probeAction ?? methodAction(source);
   if (method === void 0) return { ok: false, problems: [`${source.id} names no action for its method`] };
-  const content = identityOperations.filter((operation) => source.permission.operations.includes(operation));
-  if (content.length > 0) return { ok: false, problems: [`${content.join(", ")} is a content operation of ${source.id}, so a probe may not assert it`] };
   return fenced([allow(method, "*"), ...identityOperations.map((operation) => operationRule(source, operation, account))]);
 }
 function evaluate(rules, action, resource = "*") {

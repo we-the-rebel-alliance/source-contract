@@ -3,5 +3,6 @@
  * release attaches them as one bundle. A module that adds a validator adds it here.
  */
 import type { Validator } from "./internal/checked.ts"
+import { OUTPUTS } from "./registry.ts"
 
-export const SCHEMAS: readonly Validator<unknown>[] = []
+export const SCHEMAS: readonly Validator<unknown>[] = [...Object.values(OUTPUTS)]

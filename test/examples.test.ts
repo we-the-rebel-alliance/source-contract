@@ -4,6 +4,7 @@ import { describe, test } from "node:test"
 import { fileURLToPath } from "node:url"
 import { loadExamples, runExamples } from "../scripts/examples.ts"
 import * as conformance from "../src/conformance.ts"
+import * as events from "../src/events.ts"
 import * as schema from "../src/schema.ts"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
@@ -19,7 +20,7 @@ describe("the examples", () => {
   })
 
   test("the schema and the kit accept every example, and every declared source is exercised", async () => {
-    const results = await runExamples({ root, schema, conformance })
+    const results = await runExamples({ root, schema, conformance, events })
     assert.equal(results.length, 3)
     for (const result of results) assert.deepEqual(result.problems, [], result.name)
     const sources = results.flatMap((result) => result.reports.map((report) => report.source))
@@ -27,7 +28,7 @@ describe("the examples", () => {
   })
 
   test("every check Memory adds runs on at least one example", async () => {
-    const results = await runExamples({ root, schema, conformance })
+    const results = await runExamples({ root, schema, conformance, events })
     const ran = new Set(results.flatMap((result) => result.reports.flatMap((report) => report.checks.filter((check) => check.ran).map((check) => check.name))))
     for (const name of ["declaration", "page-result", "failed-holds-cursor", "gap-and-cursor-expired", "refused-is-final", "probe", "details", "suggest", "unused-grants"]) {
       assert.ok(ran.has(name), `${name} did not run on any example`)

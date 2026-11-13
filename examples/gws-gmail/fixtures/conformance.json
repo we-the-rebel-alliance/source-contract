@@ -42,7 +42,7 @@
             }
           ],
           "answer": {
-            "source": "gws.gmail",
+            "source": "gmail",
             "plugin": "@joe-broadhead/opencode-gws",
             "account": "sam.rivera@example.com",
             "owner": {
@@ -61,17 +61,17 @@
                   {
                     "role": "from",
                     "id": "mailto:ama.mensah@example.com",
-                    "label": "Ama Mensah"
+                    "name": "Ama Mensah"
                   },
                   {
                     "role": "to",
                     "id": "mailto:sam.rivera@example.com",
-                    "label": "Sam Rivera"
+                    "name": "Sam Rivera"
                   },
                   {
                     "role": "cc",
                     "id": "mailto:jordan.lee@example.org",
-                    "label": "Lee, Jordan"
+                    "name": "Lee, Jordan"
                   }
                 ],
                 "title": "Q4 numbers",
@@ -83,7 +83,9 @@
                   "CATEGORY_PERSONAL",
                   "UNREAD"
                 ],
-                "hash": "sha256:89bfcbd5823046f08e7dbd62220a037fd026192a62e3f4cb32087e4dc45c5402"
+                "source": "gmail",
+                "account": "sam.rivera@example.com",
+                "hash": "sha256:66bfc85bda3b58d4de94bb09ddac25fab89998d4604300b0cb86aaba29b53adb"
               },
               {
                 "kind": "message",
@@ -94,7 +96,7 @@
                   {
                     "role": "from",
                     "id": "mailto:sam.rivera@example.com",
-                    "label": "Sam Rivera"
+                    "name": "Sam Rivera"
                   },
                   {
                     "role": "to",
@@ -111,7 +113,9 @@
                 "labels": [
                   "SENT"
                 ],
-                "hash": "sha256:16d99048ed81aed09f3aae9e9f91ed6e6a2578872ebd44271d9911b8066cc815"
+                "source": "gmail",
+                "account": "sam.rivera@example.com",
+                "hash": "sha256:9bb2e0ae2eb3dc699709675f388bfdda02b7a44716cda7b4e9be38de98f232c2"
               },
               {
                 "kind": "message",
@@ -122,7 +126,7 @@
                   {
                     "role": "from",
                     "id": "mailto:ama.mensah@example.com",
-                    "label": "Ama Mensah"
+                    "name": "Ama Mensah"
                   }
                 ],
                 "title": "Lunch?",
@@ -132,7 +136,9 @@
                   "INBOX",
                   "STARRED"
                 ],
-                "hash": "sha256:ab3e1089963fd3dbdbe19c06048a30b0df918cfeacba9a07d0bb67d03b47e266"
+                "source": "gmail",
+                "account": "sam.rivera@example.com",
+                "hash": "sha256:4be48341187827d37f7d69fc9a25ec68776ceac2aef55df9375e404038b6065e"
               }
             ],
             "cursor": "gmail:sam.rivera@example.com:history:1009",
@@ -140,7 +146,13 @@
             "refused": [
               {
                 "external_id": "18f0000000000005",
-                "reason": "instruction-shaped text from another sender"
+                "reason": "instruction",
+                "detail": "instruction-shaped text from another person"
+              },
+              {
+                "external_id": "18f00000000000aa",
+                "reason": "secret",
+                "detail": "api key"
               }
             ],
             "failed": []
@@ -174,7 +186,7 @@
             }
           ],
           "answer": {
-            "source": "gws.gmail",
+            "source": "gmail",
             "plugin": "@joe-broadhead/opencode-gws",
             "account": "sam.rivera@example.com",
             "owner": {
@@ -193,17 +205,17 @@
                   {
                     "role": "from",
                     "id": "mailto:ama.mensah@example.com",
-                    "label": "Ama Mensah"
+                    "name": "Ama Mensah"
                   },
                   {
                     "role": "to",
                     "id": "mailto:sam.rivera@example.com",
-                    "label": "Sam Rivera"
+                    "name": "Sam Rivera"
                   },
                   {
                     "role": "cc",
                     "id": "mailto:jordan.lee@example.org",
-                    "label": "Lee, Jordan"
+                    "name": "Lee, Jordan"
                   }
                 ],
                 "title": "Q4 numbers",
@@ -215,7 +227,9 @@
                   "CATEGORY_PERSONAL",
                   "UNREAD"
                 ],
-                "hash": "sha256:89bfcbd5823046f08e7dbd62220a037fd026192a62e3f4cb32087e4dc45c5402"
+                "source": "gmail",
+                "account": "sam.rivera@example.com",
+                "hash": "sha256:66bfc85bda3b58d4de94bb09ddac25fab89998d4604300b0cb86aaba29b53adb"
               },
               {
                 "kind": "message",
@@ -226,7 +240,7 @@
                   {
                     "role": "from",
                     "id": "mailto:sam.rivera@example.com",
-                    "label": "Sam Rivera"
+                    "name": "Sam Rivera"
                   },
                   {
                     "role": "to",
@@ -243,7 +257,9 @@
                 "labels": [
                   "SENT"
                 ],
-                "hash": "sha256:16d99048ed81aed09f3aae9e9f91ed6e6a2578872ebd44271d9911b8066cc815"
+                "source": "gmail",
+                "account": "sam.rivera@example.com",
+                "hash": "sha256:9bb2e0ae2eb3dc699709675f388bfdda02b7a44716cda7b4e9be38de98f232c2"
               },
               {
                 "kind": "message",
@@ -254,7 +270,7 @@
                   {
                     "role": "from",
                     "id": "mailto:ama.mensah@example.com",
-                    "label": "Ama Mensah"
+                    "name": "Ama Mensah"
                   }
                 ],
                 "title": "Lunch?",
@@ -264,7 +280,9 @@
                   "INBOX",
                   "STARRED"
                 ],
-                "hash": "sha256:ab3e1089963fd3dbdbe19c06048a30b0df918cfeacba9a07d0bb67d03b47e266"
+                "source": "gmail",
+                "account": "sam.rivera@example.com",
+                "hash": "sha256:4be48341187827d37f7d69fc9a25ec68776ceac2aef55df9375e404038b6065e"
               }
             ],
             "cursor": "gmail:sam.rivera@example.com:history:1009:held",
@@ -272,13 +290,14 @@
             "refused": [
               {
                 "external_id": "18f0000000000005",
-                "reason": "instruction-shaped text from another sender"
+                "reason": "instruction",
+                "detail": "instruction-shaped text from another person"
               }
             ],
             "failed": [
               {
                 "external_id": "18f0000000000007",
-                "reason": "the provider answered RATE_LIMITED for this message"
+                "code": "RATE_LIMITED"
               }
             ]
           }
@@ -308,7 +327,7 @@
             }
           ],
           "answer": {
-            "source": "gws.gmail",
+            "source": "gmail",
             "plugin": "@joe-broadhead/opencode-gws",
             "account": "sam.rivera@example.com",
             "owner": {
@@ -327,17 +346,17 @@
                   {
                     "role": "from",
                     "id": "mailto:ama.mensah@example.com",
-                    "label": "Ama Mensah"
+                    "name": "Ama Mensah"
                   },
                   {
                     "role": "to",
                     "id": "mailto:sam.rivera@example.com",
-                    "label": "Sam Rivera"
+                    "name": "Sam Rivera"
                   },
                   {
                     "role": "cc",
                     "id": "mailto:jordan.lee@example.org",
-                    "label": "Lee, Jordan"
+                    "name": "Lee, Jordan"
                   }
                 ],
                 "title": "Q4 numbers",
@@ -349,7 +368,9 @@
                   "CATEGORY_PERSONAL",
                   "UNREAD"
                 ],
-                "hash": "sha256:89bfcbd5823046f08e7dbd62220a037fd026192a62e3f4cb32087e4dc45c5402"
+                "source": "gmail",
+                "account": "sam.rivera@example.com",
+                "hash": "sha256:66bfc85bda3b58d4de94bb09ddac25fab89998d4604300b0cb86aaba29b53adb"
               },
               {
                 "kind": "message",
@@ -360,7 +381,7 @@
                   {
                     "role": "from",
                     "id": "mailto:sam.rivera@example.com",
-                    "label": "Sam Rivera"
+                    "name": "Sam Rivera"
                   },
                   {
                     "role": "to",
@@ -377,7 +398,9 @@
                 "labels": [
                   "SENT"
                 ],
-                "hash": "sha256:16d99048ed81aed09f3aae9e9f91ed6e6a2578872ebd44271d9911b8066cc815"
+                "source": "gmail",
+                "account": "sam.rivera@example.com",
+                "hash": "sha256:9bb2e0ae2eb3dc699709675f388bfdda02b7a44716cda7b4e9be38de98f232c2"
               },
               {
                 "kind": "message",
@@ -388,7 +411,7 @@
                   {
                     "role": "from",
                     "id": "mailto:ama.mensah@example.com",
-                    "label": "Ama Mensah"
+                    "name": "Ama Mensah"
                   }
                 ],
                 "title": "Lunch?",
@@ -398,7 +421,9 @@
                   "INBOX",
                   "STARRED"
                 ],
-                "hash": "sha256:ab3e1089963fd3dbdbe19c06048a30b0df918cfeacba9a07d0bb67d03b47e266"
+                "source": "gmail",
+                "account": "sam.rivera@example.com",
+                "hash": "sha256:4be48341187827d37f7d69fc9a25ec68776ceac2aef55df9375e404038b6065e"
               }
             ],
             "cursor": "gmail:sam.rivera@example.com:history:1010",
@@ -406,7 +431,8 @@
             "refused": [
               {
                 "external_id": "18f0000000000005",
-                "reason": "instruction-shaped text from another sender"
+                "reason": "instruction",
+                "detail": "instruction-shaped text from another person"
               }
             ],
             "failed": []
@@ -451,7 +477,7 @@
             }
           ],
           "answer": {
-            "source": "gws.gmail",
+            "source": "gmail",
             "plugin": "@joe-broadhead/opencode-gws",
             "account": "sam.rivera@example.com",
             "owner": {
@@ -470,17 +496,17 @@
                   {
                     "role": "from",
                     "id": "mailto:ama.mensah@example.com",
-                    "label": "Ama Mensah"
+                    "name": "Ama Mensah"
                   },
                   {
                     "role": "to",
                     "id": "mailto:sam.rivera@example.com",
-                    "label": "Sam Rivera"
+                    "name": "Sam Rivera"
                   },
                   {
                     "role": "cc",
                     "id": "mailto:jordan.lee@example.org",
-                    "label": "Lee, Jordan"
+                    "name": "Lee, Jordan"
                   }
                 ],
                 "title": "Q4 numbers",
@@ -492,10 +518,12 @@
                   "CATEGORY_PERSONAL",
                   "UNREAD"
                 ],
-                "hash": "sha256:89bfcbd5823046f08e7dbd62220a037fd026192a62e3f4cb32087e4dc45c5402"
+                "source": "gmail",
+                "account": "sam.rivera@example.com",
+                "hash": "sha256:66bfc85bda3b58d4de94bb09ddac25fab89998d4604300b0cb86aaba29b53adb"
               }
             ],
-            "cursor": "",
+            "cursor": "detail:18f0000000000001",
             "more": false,
             "refused": [],
             "failed": []

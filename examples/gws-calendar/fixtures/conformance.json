@@ -33,7 +33,7 @@
             }
           ],
           "answer": {
-            "source": "gws.calendar",
+            "source": "calendar",
             "plugin": "@joe-broadhead/opencode-gws",
             "account": "sam.rivera@example.com",
             "owner": {
@@ -52,12 +52,12 @@
                   {
                     "role": "organizer",
                     "id": "mailto:ama.mensah@example.com",
-                    "label": "Ama Mensah"
+                    "name": "Ama Mensah"
                   },
                   {
                     "role": "attendee",
                     "id": "mailto:sam.rivera@example.com",
-                    "label": "Sam Rivera"
+                    "name": "Sam Rivera"
                   }
                 ],
                 "title": "Quarterly plan",
@@ -65,9 +65,11 @@
                 "url": "https://calendar.google.com/calendar/event?eid=evt-a",
                 "labels": [
                   "confirmed",
-                  "Room 3"
+                  "Room-3"
                 ],
-                "hash": "sha256:5e285b4305eb32df254d2d81053b134e85cb25a71ee3a5019d14f5348c952713"
+                "source": "calendar",
+                "account": "sam.rivera@example.com",
+                "hash": "sha256:32c3413b27b6bdc89fc3c9f0769b153d1e8f17d5e6df2b101a7eda8045ef920e"
               }
             ],
             "cursor": "calendar:sam.rivera@example.com:page:page-2",
@@ -91,7 +93,7 @@
             }
           ],
           "answer": {
-            "source": "gws.calendar",
+            "source": "calendar",
             "plugin": "@joe-broadhead/opencode-gws",
             "account": "sam.rivera@example.com",
             "owner": {
@@ -103,6 +105,22 @@
             "events": [
               {
                 "kind": "meeting",
+                "external_id": "evt-b",
+                "occurred_at": "2026-11-02T15:00:00.000Z",
+                "thread": "calendar:evt-b",
+                "labels": [
+                  "cancelled"
+                ],
+                "source": "calendar",
+                "account": "sam.rivera@example.com",
+                "actors": [],
+                "title": "",
+                "text": "",
+                "url": null,
+                "hash": "sha256:25e580ac5df39ec593b4afcb53df245ba596b552cf87681a3846439fd3dfbf44"
+              },
+              {
+                "kind": "meeting",
                 "external_id": "evt-c",
                 "occurred_at": "2026-11-03T09:00:00.000Z",
                 "thread": "calendar:evt-c",
@@ -110,12 +128,12 @@
                   {
                     "role": "organizer",
                     "id": "mailto:sam.rivera@example.com",
-                    "label": "Sam Rivera"
+                    "name": "Sam Rivera"
                   },
                   {
                     "role": "attendee",
                     "id": "mailto:jordan.lee@example.org",
-                    "label": "Jordan Lee"
+                    "name": "Jordan Lee"
                   }
                 ],
                 "title": "Design review",
@@ -124,17 +142,9 @@
                 "labels": [
                   "confirmed"
                 ],
-                "hash": "sha256:35a9991e30f4844fdea4c92224d8afb681f00f72d604abe0ba8015d1f4d45c47"
-              },
-              {
-                "kind": "meeting",
-                "external_id": "evt-b",
-                "occurred_at": "2026-11-02T15:00:00.000Z",
-                "thread": "calendar:evt-b",
-                "labels": [
-                  "cancelled"
-                ],
-                "hash": "sha256:f9725301a6077d21a11b659db1fb95d33731db09f7a1284c51b483743c14439b"
+                "source": "calendar",
+                "account": "sam.rivera@example.com",
+                "hash": "sha256:cd4ac5290655960933e86e87fa597336a5214f9549601e59717c2c68ed2cffd0"
               }
             ],
             "cursor": "calendar:sam.rivera@example.com:sync:sync-1",
@@ -142,83 +152,11 @@
             "refused": [
               {
                 "external_id": "evt-e",
-                "reason": "the event is not the signed-in person's to read"
+                "reason": "owner",
+                "detail": "not the signed-in person's"
               }
             ],
             "failed": []
-          }
-        },
-        {
-          "name": "one failed event holds the cursor back",
-          "input": {
-            "source": "calendar",
-            "account": "sam.rivera@example.com",
-            "cursor": "calendar:sam.rivera@example.com:page:page-2",
-            "limit": 2
-          },
-          "expect": "page",
-          "asserts": [
-            {
-              "action": "gws.read",
-              "resource": "sam.rivera@example.com:calendar.events.list"
-            }
-          ],
-          "answer": {
-            "source": "gws.calendar",
-            "plugin": "@joe-broadhead/opencode-gws",
-            "account": "sam.rivera@example.com",
-            "owner": {
-              "id": "mailto:sam.rivera@example.com",
-              "label": "Sam Rivera"
-            },
-            "asOf": "2026-11-13T09:00:00.000Z",
-            "trust": "untrusted",
-            "events": [
-              {
-                "kind": "meeting",
-                "external_id": "evt-c",
-                "occurred_at": "2026-11-03T09:00:00.000Z",
-                "thread": "calendar:evt-c",
-                "actors": [
-                  {
-                    "role": "organizer",
-                    "id": "mailto:sam.rivera@example.com",
-                    "label": "Sam Rivera"
-                  },
-                  {
-                    "role": "attendee",
-                    "id": "mailto:jordan.lee@example.org",
-                    "label": "Jordan Lee"
-                  }
-                ],
-                "title": "Design review",
-                "text": "Bring the API sketch.",
-                "url": "https://calendar.google.com/calendar/event?eid=evt-c",
-                "labels": [
-                  "confirmed"
-                ],
-                "hash": "sha256:35a9991e30f4844fdea4c92224d8afb681f00f72d604abe0ba8015d1f4d45c47"
-              },
-              {
-                "kind": "meeting",
-                "external_id": "evt-b",
-                "occurred_at": "2026-11-02T15:00:00.000Z",
-                "thread": "calendar:evt-b",
-                "labels": [
-                  "cancelled"
-                ],
-                "hash": "sha256:f9725301a6077d21a11b659db1fb95d33731db09f7a1284c51b483743c14439b"
-              }
-            ],
-            "cursor": "calendar:sam.rivera@example.com:page:page-2",
-            "more": true,
-            "refused": [],
-            "failed": [
-              {
-                "external_id": "evt-d",
-                "reason": "the provider answered RATE_LIMITED for this event"
-              }
-            ]
           }
         },
         {
@@ -236,7 +174,7 @@
             }
           ],
           "answer": {
-            "source": "gws.calendar",
+            "source": "calendar",
             "plugin": "@joe-broadhead/opencode-gws",
             "account": "sam.rivera@example.com",
             "owner": {
@@ -255,12 +193,12 @@
                   {
                     "role": "organizer",
                     "id": "mailto:ama.mensah@example.com",
-                    "label": "Ama Mensah"
+                    "name": "Ama Mensah"
                   },
                   {
                     "role": "attendee",
                     "id": "mailto:sam.rivera@example.com",
-                    "label": "Sam Rivera"
+                    "name": "Sam Rivera"
                   }
                 ],
                 "title": "Quarterly plan",
@@ -268,9 +206,11 @@
                 "url": "https://calendar.google.com/calendar/event?eid=evt-a",
                 "labels": [
                   "confirmed",
-                  "Room 3"
+                  "Room-3"
                 ],
-                "hash": "sha256:5e285b4305eb32df254d2d81053b134e85cb25a71ee3a5019d14f5348c952713"
+                "source": "calendar",
+                "account": "sam.rivera@example.com",
+                "hash": "sha256:32c3413b27b6bdc89fc3c9f0769b153d1e8f17d5e6df2b101a7eda8045ef920e"
               }
             ],
             "cursor": "calendar:sam.rivera@example.com:sync:sync-2",
@@ -313,7 +253,7 @@
             }
           ],
           "answer": {
-            "source": "gws.calendar",
+            "source": "calendar",
             "plugin": "@joe-broadhead/opencode-gws",
             "account": "sam.rivera@example.com",
             "owner": {
@@ -332,12 +272,12 @@
                   {
                     "role": "organizer",
                     "id": "mailto:ama.mensah@example.com",
-                    "label": "Ama Mensah"
+                    "name": "Ama Mensah"
                   },
                   {
                     "role": "attendee",
                     "id": "mailto:sam.rivera@example.com",
-                    "label": "Sam Rivera"
+                    "name": "Sam Rivera"
                   }
                 ],
                 "title": "Quarterly plan",
@@ -345,9 +285,11 @@
                 "url": "https://calendar.google.com/calendar/event?eid=evt-a",
                 "labels": [
                   "confirmed",
-                  "Room 3"
+                  "Room-3"
                 ],
-                "hash": "sha256:5e285b4305eb32df254d2d81053b134e85cb25a71ee3a5019d14f5348c952713"
+                "source": "calendar",
+                "account": "sam.rivera@example.com",
+                "hash": "sha256:32c3413b27b6bdc89fc3c9f0769b153d1e8f17d5e6df2b101a7eda8045ef920e"
               }
             ],
             "cursor": "calendar:sam.rivera@example.com:sync:sync-3",
@@ -401,7 +343,10 @@
       "details": [],
       "identity": [
         "calendar.calendarList.get"
-      ]
+      ],
+      "atomicPages": {
+        "reason": "calendar.events.list answers the page in one call, so no event can fail on its own"
+      }
     },
     "gws.calendar.today": {
       "cases": [],

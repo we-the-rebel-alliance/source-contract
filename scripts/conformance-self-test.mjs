@@ -15,6 +15,7 @@ const examples = join(root, "examples")
 const { readInstalledDescriptor } = await import(pathToFileURL(join(root, "dist", "descriptor.js")).href)
 const schema = await import(pathToFileURL(join(root, "dist", "schema.js")).href)
 const conformance = await import(pathToFileURL(join(root, "dist", "conformance.js")).href)
+const events = await import(pathToFileURL(join(root, "dist", "events.js")).href)
 
 const problems = []
 let count = 0
@@ -31,7 +32,7 @@ if (count === 0) {
   process.exit(1)
 }
 
-const results = await runExamples({ root, schema, conformance })
+const results = await runExamples({ root, schema, conformance, events })
 problems.push(...results.flatMap((result) => result.problems.map((problem) => `examples/${result.name}: ${problem}`)))
 const reports = results.flatMap((result) => result.reports)
 

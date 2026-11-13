@@ -1,7 +1,8 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
   SOURCES_SCHEMA
-} from "./chunks/chunk-FU3LV3DM.js";
+} from "./chunks/chunk-AXAGCSNI.js";
+import "./chunks/chunk-6RDMPYYW.js";
 import "./chunks/chunk-HLVAKAYG.js";
 
 // src/internal/conformance/public-suffix-list.ts

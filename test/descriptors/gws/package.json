@@ -1,0 +1,44 @@
+{
+  "name": "@joe-broadhead/opencode-gws",
+  "version": "0.0.0-example",
+  "description": "A test descriptor in the shape of Memory's examples: not the plugin.",
+  "private": true,
+  "sources": {
+    "contractVersion": 1,
+    "items": [
+      {
+        "id": "gws.gmail",
+        "kind": "events",
+        "reads": "message",
+        "tool": "events_list",
+        "input": { "source": "gmail" },
+        "accounts": { "named": true },
+        "scope": { "keys": ["labels"], "describe": "Which labels" },
+        "details": [{ "id": "gws.gmail.message", "tool": "read", "from": ["external_id"] }],
+        "permission": {
+          "events": "gws.events_list",
+          "operations": ["gmail.users.history.list", "gmail.users.messages.list", "gmail.users.messages.get"]
+        },
+        "private": true,
+        "cost": { "class": "free" },
+        "maxBytes": 262144,
+        "retentionDays": 30,
+        "urlHosts": ["mail.google.com"]
+      },
+      {
+        "id": "gws.calendar.today",
+        "kind": "snapshot",
+        "tool": "calendar_today",
+        "output": "agenda",
+        "params": { "window": { "relative": true } },
+        "accounts": { "named": true },
+        "permission": { "tool": "gws.calendar_today", "operations": ["calendar.events.list"] },
+        "private": true,
+        "cost": { "class": "free" },
+        "maxAgeSec": 900,
+        "maxBytes": 65536,
+        "urlHosts": ["calendar.google.com"]
+      }
+    ]
+  }
+}

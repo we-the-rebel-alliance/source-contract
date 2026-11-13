@@ -573,6 +573,91 @@ export function screenEvents(events: readonly SourceEvent[], options: ScreenOpti
   return { events: kept, refused }
 }
 
+// ── Probe (design §2.3; source-contract#8 and #4) ───────────────────────────
+
+/** The tools-RPC method and tool every source plugin names `probe`: one per plugin, called per source. */
+export const PROBE = "probe"
+
+/** `probe`'s input: the source (the plugin's first without it) and the account (its default without it). Nothing else. */
+export interface ProbeInput {
+  readonly source?: string
+  readonly account?: string
+}
+
+/** The provider sign-in scopes a probe may list: at most this many, each at most this long. */
+export const PROBE_LIMITS = { scopes: 64, scope: 256 } as const
+
+/**
+ * What `probe` answers: whose the source is and what its sign-in holds, and nothing it reads. `owner.id` is the id a
+ * host keys its cache on and `$me` resolves to. `scopes` are the provider sign-in's scopes, so a Calendar-only sign-in
+ * can be told apart. `cost` is what the provider charged for the probe, for a billed source such as X (its own price
+ * table, per §2.2 `cost.probe`). `trust` is "untrusted", as on every result.
+ */
+export interface ProbeResult {
+  readonly source: string
+  readonly account: string
+  readonly owner: EventsOwner
+  readonly scopes?: string[]
+  readonly cost?: EventsCost
+  readonly trust: typeof TRUST
+}
+
+/** `probe`'s input checked, or its problems, naming fields and never values. Anything but source and account is refused. */
+export function parseProbeInput(input: unknown): { ok: true; value: ProbeInput } | { ok: false; problems: string[] } {
+  const value = input === undefined || input === null ? {} : input
+  if (!plainObject(value)) return { ok: false, problems: ["the input must be an object"] }
+  const problems = Object.keys(value).filter((key) => key !== "source" && key !== "account").map((key) => `"${key}" is not an input of probe`)
+  const { source, account } = value
+  if (source !== undefined && (typeof source !== "string" || source.length > EVENT_LIMITS.source || !SOURCE_PATTERN.test(source))) {
+    problems.push(`"source" must be a source's name, a lowercase word such as gmail`)
+  }
+  if (account !== undefined && (typeof account !== "string" || account.length === 0 || account.length > EVENT_LIMITS.account || hasControl(account))) {
+    problems.push(`"account" must be a non-empty account name of at most ${EVENT_LIMITS.account} characters`)
+  }
+  if (problems.length > 0) return { ok: false, problems }
+  return { ok: true, value: { ...(source === undefined ? {} : { source: source as string }), ...(account === undefined ? {} : { account: account as string }) } }
+}
+
+/** A probe answer for `identity`, with the sign-in's scopes and the probe's cost when given. */
+export function probeResult(identity: EventsListIdentity, extras: { readonly scopes?: readonly string[]; readonly cost?: EventsCost } = {}): ProbeResult {
+  return {
+    source: identity.source,
+    account: identity.account,
+    owner: { id: identity.owner.id, label: identity.owner.label },
+    ...(extras.scopes === undefined ? {} : { scopes: [...new Set(extras.scopes)] }),
+    ...(extras.cost === undefined ? {} : { cost: extras.cost }),
+    trust: TRUST,
+  }
+}
+
+const PROBE_KEYS: readonly string[] = ["source", "account", "owner", "scopes", "cost", "trust"]
+
+/**
+ * A probe answer's problems, one sentence each; none when it keeps the contract. Its keys are exactly
+ * `source, account, owner, scopes?, cost?, trust`, so a probe that returned content (events, data, text) fails. With
+ * `expected`, the source and the account must be the ones asked for.
+ */
+export function probeResultProblems(result: unknown, expected: { readonly source?: string; readonly account?: string } = {}): string[] {
+  if (!plainObject(result)) return ["the probe answer is not an object"]
+  const problems: string[] = []
+  for (const key of Object.keys(result)) if (!PROBE_KEYS.includes(key)) problems.push(`the probe answer has the field "${key}": a probe reads no content, and the contract defines no such field`)
+  if (!line(result["source"], EVENT_LIMITS.source) || !SOURCE_PATTERN.test(result["source"])) problems.push("the probe answer's source must be a lowercase name such as gmail")
+  else if (expected.source !== undefined && result["source"] !== expected.source) problems.push(`the probe answer names the source ${result["source"]}, not ${expected.source}`)
+  if (!line(result["account"], EVENT_LIMITS.account)) problems.push(`the probe answer's account must be a non-empty name of at most ${EVENT_LIMITS.account} characters`)
+  else if (expected.account !== undefined && result["account"] !== expected.account) problems.push("the probe answer names another account than the one asked for")
+  const owner = result["owner"]
+  if (!plainObject(owner) || !line(owner["id"], EVENT_LIMITS.ownerId) || !line(owner["label"], EVENT_LIMITS.ownerLabel) || Object.keys(owner).some((key) => key !== "id" && key !== "label")) {
+    problems.push("the probe answer's owner must be { id, label }, two non-empty lines")
+  }
+  const scopes = result["scopes"]
+  if (scopes !== undefined && (!Array.isArray(scopes) || scopes.length > PROBE_LIMITS.scopes || scopes.some((scope) => !line(scope, PROBE_LIMITS.scope)) || new Set(scopes).size !== scopes.length)) {
+    problems.push(`the probe answer's scopes must be at most ${PROBE_LIMITS.scopes} different lines of at most ${PROBE_LIMITS.scope} characters`)
+  }
+  if (result["cost"] !== undefined) problems.push(...extraProblems({ cost: result["cost"] }, new Set()).map((problem) => problem.replace("the result's cost", "the probe answer's cost")))
+  if (result["trust"] !== TRUST) problems.push(`the probe answer's trust must be "${TRUST}"`)
+  return problems
+}
+
 // ── Results ───────────────────────────────────────────────────────────────
 
 /** Whose a result is: the source and account it lists, and the signed-in owner of that account. */

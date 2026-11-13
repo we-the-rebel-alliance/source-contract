@@ -34,6 +34,7 @@ export interface RecordedSource {
   readonly suggest?: RecordedCall | undefined
   readonly snapshot?: (RecordedCall & { readonly input?: Readonly<Record<string, unknown>> | undefined }) | undefined
   readonly identity?: readonly string[] | undefined
+  readonly atomicPages?: { readonly reason: string } | undefined
 }
 
 /** One recorded call: its input, the assertions it made, and its answer or its refusal. */
@@ -61,6 +62,8 @@ export interface ExampleModules {
     readonly declarationProblems: (sources: unknown, options: { readonly tools: readonly ToolDeclaration[] }) => readonly string[]
     readonly sourceConformance: (options: SourceConformanceOptions) => Promise<ConformanceReport>
   }
+  /** The `events` module's page validator: the authority on a recorded page's shape. */
+  readonly events: { readonly resultProblems: (result: unknown, limit?: number, maxBytes?: number) => readonly string[] }
 }
 
 /** The result for one example: what is wrong with it, and the kit's report per source. */
@@ -98,7 +101,7 @@ export function loadExamples(root: string): Example[] {
 }
 
 /** Run the schema and the kit over every example: none may fail, and every declared source must be exercised. */
-export async function runExamples({ root, schema, conformance }: ExampleModules): Promise<ExampleResult[]> {
+export async function runExamples({ root, schema, conformance, events }: ExampleModules): Promise<ExampleResult[]> {
   const results: ExampleResult[] = []
   for (const example of loadExamples(root)) {
     const problems: string[] = []
@@ -106,6 +109,14 @@ export async function runExamples({ root, schema, conformance }: ExampleModules)
     const pkg = JSON.parse(readFileSync(join(root, "examples", example.name, "package.json"), "utf8")) as { name: string; sources: unknown }
     const checked = schema.SOURCES_SCHEMA.check(example.sources)
     if (!checked.ok) problems.push(...checked.problems.map((problem) => `sources: ${problem}`))
+    // Every recorded page is a page result of contract 1, so the `events` module is asked first.
+    for (const [id, recorded] of Object.entries(example.fixture?.sources ?? {})) {
+      const pages = [
+        ...(recorded.cases ?? []).filter((entry) => entry.answer !== undefined).map((entry) => ({ what: `${id} ${entry.name ?? "a case"}`, answer: entry.answer })),
+        ...(recorded.details ?? []).filter((entry) => entry.answer !== undefined).map((entry) => ({ what: `${id} ${entry.id}`, answer: entry.answer })),
+      ]
+      for (const page of pages) problems.push(...events.resultProblems(page.answer).map((problem) => `${page.what}: ${problem}`))
+    }
     const fixture = example.fixture
     if (fixture === undefined) {
       problems.push("fixtures/conformance.json is missing: the kit must run the example's own answers")
@@ -132,6 +143,7 @@ export async function runExamples({ root, schema, conformance }: ExampleModules)
         tools,
         ...(fixture.account === undefined ? {} : { account: fixture.account }),
         ...(recorded.identity === undefined ? {} : { identityOperations: recorded.identity }),
+        ...(recorded.atomicPages === undefined ? {} : { atomicPages: recorded.atomicPages }),
         ...(recorded.snapshot === undefined ? {} : { snapshotCases: [recorded.snapshot.input ?? {}] }),
         cases: (recorded.cases ?? []).map((entry) => ({
           name: entry.name ?? "a recorded case",

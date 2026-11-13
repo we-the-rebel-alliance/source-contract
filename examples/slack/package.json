@@ -51,7 +51,10 @@
         "maxBytes": 262144,
         "urlHosts": [
           "*.slack.com"
-        ]
+        ],
+        "input": {
+          "source": "slack"
+        }
       }
     ]
   }

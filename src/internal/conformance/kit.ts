@@ -100,6 +100,12 @@ export interface SourceConformanceOptions {
   readonly account?: string | undefined
   /** The grants to run under. Default: the kit's provisional derivation from the declaration. */
   readonly grants?: readonly Grant[] | undefined
+  /**
+   * Set when a page is fetched atomically: one provider call answers the whole page, so no single item can fail on its
+   * own and `failed[]` can never be produced (Calendar's `events.list` is one). The `failed-holds-cursor` check is then
+   * not applicable, and the reason is shown in the report. The reason must be non-empty; an empty one is ignored.
+   */
+  readonly atomicPages?: { readonly reason: string } | undefined
 }
 
 /** One named check: whether it ran, whether it applies at all, and what it found. */
@@ -108,6 +114,8 @@ export interface ConformanceCheck {
   readonly ran: boolean
   /** True when the check does not apply to this source, such as a page check on a snapshot. */
   readonly notApplicable: boolean
+  /** Why the check does not apply, when the source states it: an atomic page's reason, for instance. */
+  readonly reason?: string | undefined
   readonly problems: readonly string[]
 }
 
@@ -165,8 +173,8 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   const context: SessionContext = { account, permission: running.permission }
   const bindContext: SessionContext = { account, permission: bind.permission }
   const checks: ConformanceCheck[] = []
-  const add = (name: string, problems: readonly string[], ran = true, notApplicable = false): void => {
-    checks.push({ name, ran, notApplicable, problems })
+  const add = (name: string, problems: readonly string[], ran = true, notApplicable = false, reason?: string): void => {
+    checks.push({ name, ran, notApplicable, ...(reason === undefined ? {} : { reason }), problems })
   }
   const isEvents = source.kind === "events"
 
@@ -227,7 +235,11 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
     }
   }
   add("page-result", shape, isEvents && cases.length > 0, !isEvents)
-  add("failed-holds-cursor", cursor, isEvents && sawFailed, !isEvents)
+  // A page fetched in one call can never have a per-item failure, so the source may say so; an empty reason is no
+  // reason at all, and the check applies as it does by default.
+  const atomicReason = options.atomicPages?.reason.trim() ?? ""
+  const atomic = isEvents && atomicReason !== ""
+  add("failed-holds-cursor", cursor, atomic ? false : isEvents && sawFailed, !isEvents || atomic, atomic ? atomicReason : undefined)
   add("gap-and-cursor-expired", gap, isEvents && sawGap, !isEvents)
   add("refused-is-final", refused, isEvents && sawRefused, !isEvents)
   add("billed-cost", cost, source.cost.class === "billed" && isEvents, source.cost.class !== "billed")

@@ -34,8 +34,8 @@ This package holds the contract only: the data model, the descriptor schema, the
 | `permission` | exact OpenCode session rules from a grant | the app | in `main` |
 | `read` | the consumer-side read in a fenced session, with detail reads and `probe` | the app | in `main` |
 | `broker-client` | a host's broker when one is offered, `read` embedded otherwise | the app | in `main` |
-| `schema` | the full descriptor and result schemas in zod, with JSON Schema generated | Memory | to come |
-| `conformance` | the kit: the draft's ten checks, the recording permission context and the read-verb allowlist | Memory | to come |
+| `schema` | the full descriptor and result schemas in zod, with JSON Schema generated | Memory | this PR (#13) |
+| `conformance` | the kit: the draft's ten checks, the recording permission context, the tokenised verb rule and the screening | Memory | this PR (#13) |
 | `events` | the one normaliser and hash, the error table and the secret-pattern refusal | the plugin family | in `main` (#7) |
 | `cursor` | the versioned codec, bound to plugin, source, account and scope | the plugin family | in `main` (#7) |
 | `tools-rpc` | the transport, version 2 with the version 2.3 per-method resource resolver | the plugin family | in `main` (#7) |

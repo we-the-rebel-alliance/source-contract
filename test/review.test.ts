@@ -869,3 +869,141 @@ describe("the page fields that are absent, and the limits §2.2 does not state",
     assert.equal(priced.ok, true, priced.ok ? "" : priced.problems.join("; "))
   })
 })
+
+describe("a page fetched atomically", () => {
+  const item = (): Record<string, unknown> => ({
+    id: "gws.calendar",
+    kind: "events",
+    reads: "meeting",
+    tool: "events_list",
+    input: { source: "calendar" },
+    accounts: { named: true },
+    permission: { events: "gws.events_list", operations: ["calendar.calendarList.get", "calendar.events.list"] },
+    cost: { class: "free" },
+  })
+  const page = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+    source: "calendar",
+    plugin: "@joe-broadhead/opencode-gws",
+    account: "sam.rivera@example.com",
+    owner: { id: "mailto:sam.rivera@example.com", label: "Sam Rivera" },
+    asOf: ISO,
+    trust: "untrusted",
+    events: [],
+    cursor: "c1",
+    more: false,
+    refused: [{ external_id: "evt-z", reason: "owner" }],
+    failed: [],
+    ...over,
+  })
+  const run = (atomicPages?: { reason: string }) =>
+    sourceConformance({
+      plugin: "@joe-broadhead/opencode-gws",
+      source: sourceOf(item()),
+      tools: [{ id: "events_list", readOnly: true }],
+      identityOperations: ["calendar.calendarList.get"],
+      cases: [
+        { name: "a page", input: {} },
+        { name: "an expired cursor", input: { cursor: "stale" }, expect: "expired" },
+      ],
+      ...(atomicPages === undefined ? {} : { atomicPages }),
+      calls: {
+        list: async (input, context) => {
+          await context.permission.assert({ action: "gws.events_list" })
+          await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:calendar.events.list"] })
+          if (input["cursor"] === "stale") return page({ gap: { reason: "expired", since: ISO }, cursor: "fresh" })
+          return page()
+        },
+        probe: async (_input, context) => {
+          await context.permission.assert({ action: "gws.events_list" })
+          await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:calendar.calendarList.get"] })
+          return { account: "sam.rivera@example.com", owner: { id: "mailto:sam.rivera@example.com", label: "Sam Rivera" } }
+        },
+      },
+    })
+
+  test("without a reason, a source that cannot fail one item is incomplete", async () => {
+    const report = await run()
+    assert.equal(report.incomplete, true)
+    assert.equal(report.checks.find((check) => check.name === "failed-holds-cursor")?.ran, false)
+    assert.equal(report.checks.find((check) => check.name === "failed-holds-cursor")?.notApplicable, false)
+  })
+
+  test("with a reason, the check does not apply, the reason is shown, and the report is ok", async () => {
+    const report = await run({ reason: "events.list answers the whole page in one call, so no item can fail alone" })
+    const check = report.checks.find((entry) => entry.name === "failed-holds-cursor")
+    assert.equal(check?.notApplicable, true)
+    assert.equal(check?.reason, "events.list answers the whole page in one call, so no item can fail alone")
+    assert.deepEqual(report.problems, [])
+    assert.equal(report.ok, true)
+    assert.equal(report.incomplete, false)
+  })
+
+  test("an empty reason is no reason: the check applies, and the report is incomplete", async () => {
+    for (const reason of ["", "   "]) {
+      const report = await run({ reason })
+      const check = report.checks.find((entry) => entry.name === "failed-holds-cursor")
+      assert.equal(check?.notApplicable, false, reason)
+      assert.equal(report.incomplete, true, reason)
+    }
+  })
+})
+
+describe("the kit drives the secret screening from a fixture", () => {
+  const item = (): Record<string, unknown> => ({
+    id: "gws.gmail",
+    kind: "events",
+    reads: "message",
+    tool: "events_list",
+    input: { source: "gmail" },
+    accounts: { named: true },
+    permission: { events: "gws.events_list", operations: ["gmail.users.messages.list"] },
+    cost: { class: "free" },
+  })
+  const page = (events: Record<string, unknown>[]): Record<string, unknown> => ({
+    source: "gmail",
+    plugin: "@joe-broadhead/opencode-gws",
+    account: "sam.rivera@example.com",
+    owner: { id: "mailto:sam.rivera@example.com", label: "Sam Rivera" },
+    asOf: ISO,
+    trust: "untrusted",
+    events,
+    cursor: "c1",
+    more: false,
+    refused: [],
+    failed: [],
+  })
+  const run = (answer: Record<string, unknown>) =>
+    sourceConformance({
+      plugin: "@joe-broadhead/opencode-gws",
+      source: sourceOf(item()),
+      tools: [{ id: "events_list", readOnly: true }],
+      cases: [{ name: "a page", input: {} }],
+      calls: {
+        list: async (_input, context) => {
+          await context.permission.assert({ action: "gws.events_list" })
+          await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.messages.list"] })
+          return answer
+        },
+        probe: async (_input, context) => {
+          await context.permission.assert({ action: "gws.events_list" })
+          return { account: "sam.rivera@example.com", owner: { id: "mailto:sam.rivera@example.com", label: "Sam Rivera" } }
+        },
+      },
+    })
+
+  test("an event that holds a secret is refused, and a page whose secret is in refused[] passes", async () => {
+    const secret = "the deploy key is api_key = sk_live_51H8xQ2eZvKYlo2C9mN"
+    const leaked = await run(page([{ external_id: "m1", title: "key", text: secret }]))
+    assert.ok(leaked.problems.some((problem) => /holds a secret \(api key\)/.test(problem)), leaked.problems.join("; "))
+    const refused = await run({ ...page([]), refused: [{ external_id: "m1", reason: "secret", detail: "api key" }] })
+    assert.deepEqual(refused.problems, [], refused.problems.join("; "))
+  })
+
+  test("the gws Gmail fixture records a secret-shaped refusal", () => {
+    const fixture = JSON.parse(readFileSync(new URL("../examples/gws-gmail/fixtures/conformance.json", import.meta.url), "utf8")) as {
+      sources: Record<string, { cases: { answer?: { refused?: { reason?: string }[] } }[] }>
+    }
+    const refused = (fixture.sources["gws.gmail"]?.cases ?? []).flatMap((entry) => entry.answer?.refused ?? [])
+    assert.ok(refused.some((entry) => entry.reason === "secret"), "the fixture must show the screening being driven")
+  })
+})

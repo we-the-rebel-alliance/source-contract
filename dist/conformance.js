@@ -1,13 +1,15 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
   SOURCES_SCHEMA
-} from "./chunks/chunk-AXAGCSNI.js";
+} from "./chunks/chunk-TLRRHPFV.js";
 import {
   REFUSAL_REASONS,
   secretKinds
 } from "./chunks/chunk-ZTRH3FEM.js";
 import "./chunks/chunk-I2RXJJJM.js";
-import "./chunks/chunk-6RDMPYYW.js";
+import {
+  fromJSONSchema
+} from "./chunks/chunk-W5SHR7DQ.js";
 import "./chunks/chunk-HLVAKAYG.js";
 
 // src/internal/conformance/public-suffix-list.ts
@@ -10501,6 +10503,8 @@ function operationProblem(operation) {
   }
   return void 0;
 }
+var EXTENSION_NAME = /^x-([a-z][a-z0-9-]{0,31})\/([a-z][a-z0-9-]{0,31})$/;
+var MAX_OUTPUT_SCHEMA_BYTES = 32768;
 var EVENT_FIELDS = ["external_id", "kind", "occurred_at", "title", "text", "url", "thread", "actors", "labels", "hash"];
 var DETAIL_FIELDS = ["external_id", "kind", "occurred_at", "url", "thread", "actors", "labels", "hash"];
 var plain = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -10650,6 +10654,26 @@ function declarationProblems(sources, options = {}) {
         problems.push(`${at}.permission.operations lists "${operation}" twice: an operation is granted once`);
       }
     }
+    const namespace = item.id.split(".")[0] ?? item.id;
+    const extension = (name) => {
+      const match = EXTENSION_NAME.exec(name);
+      if (match === null) return void 0;
+      if (match[1] !== namespace) return `"${name}" is in the namespace "${match[1]}", and this source is in "${namespace}"`;
+      return void 0;
+    };
+    if (item.kind === "events") {
+      const problem = extension(item.reads);
+      if (problem !== void 0) problems.push(`${at}.reads: ${problem}`);
+    } else {
+      const problem = extension(item.output);
+      if (problem !== void 0) problems.push(`${at}.output: ${problem}`);
+      if (EXTENSION_NAME.test(item.output)) {
+        const bytes = item.outputSchema === void 0 ? 0 : new TextEncoder().encode(JSON.stringify(item.outputSchema)).length;
+        if (bytes > MAX_OUTPUT_SCHEMA_BYTES) {
+          problems.push(`${at}.outputSchema is ${bytes} bytes of compact JSON, over the ${MAX_OUTPUT_SCHEMA_BYTES}-byte cap`);
+        }
+      }
+    }
     const details = item.kind === "events" ? item.details ?? [] : [];
     for (const [i, detail] of details.entries()) {
       const where = `${at}.details[${i}]`;
@@ -10731,6 +10755,12 @@ function isSourceItem(value) {
       if (!plain(suggest) || typeof suggest["tool"] !== "string" || !Array.isArray(suggest["operations"])) return false;
       if (!suggest["operations"].every((operation) => typeof operation === "string")) return false;
     }
+  }
+  if (kind === "events" && typeof value["reads"] !== "string") return false;
+  if (kind === "snapshot") {
+    if (typeof value["output"] !== "string") return false;
+    const schema = value["outputSchema"];
+    if (schema !== void 0 && typeof schema !== "boolean" && !plain(schema)) return false;
   }
   const hosts = value["urlHosts"];
   if (hosts !== void 0 && (!Array.isArray(hosts) || !hosts.every((host) => typeof host === "string"))) return false;
@@ -10841,6 +10871,14 @@ function pageChecks(answer, options) {
       continue;
     }
     seen.add(event["external_id"]);
+    const kind = event["kind"];
+    if (typeof kind === "string" && EXTENSION_NAME.test(kind)) {
+      const namespace = options.source.id.split(".")[0] ?? options.source.id;
+      const match = EXTENSION_NAME.exec(kind);
+      if (match !== null && match[1] !== namespace) {
+        shape.push(`${where} events[${index}] has the kind ${kind}, in the namespace "${match[1]}", and the source is in "${namespace}"`);
+      }
+    }
     const kinds = secretKinds([event["title"], event["text"]].filter((value) => typeof value === "string").join("\n"));
     if (kinds.length > 0) {
       refused.push(`${where} lists ${event["external_id"]} as an event, and its text holds a secret (${kinds.join(", ")}): it belongs in refused[] with reason "secret"`);
@@ -11151,6 +11189,8 @@ async function sourceConformance(options) {
   }
   add("suggest", suggest, suggested !== void 0, suggested === void 0);
   const snapshot = [];
+  const outputSchema = [];
+  const extensionOutput = !isEvents && /^x-/.test(source.output);
   if (!isEvents) {
     const snapshotCases = options.snapshotCases ?? [];
     if (calls.snapshot === void 0) snapshot.push("the source is a snapshot and the kit has no snapshot call, so its grants cannot be checked");
@@ -11158,8 +11198,9 @@ async function sourceConformance(options) {
       for (const input of snapshotCases) {
         const assertedBeforeSnapshot = running.assertions.length;
         try {
-          await calls.snapshot(input, context);
+          const answer = await calls.snapshot(input, context);
           identity.push(...identityOverlap(running.assertions.slice(assertedBeforeSnapshot), identityGrants, `snapshot_read(${JSON.stringify(input)})`));
+          if (extensionOutput) outputSchema.push(...snapshotDataProblems(answer, source));
         } catch (error) {
           snapshot.push(`snapshot_read(${JSON.stringify(input)}) failed: ${messageOf(error)}`);
         }
@@ -11168,6 +11209,7 @@ async function sourceConformance(options) {
     }
   }
   add("identity-grants", identity);
+  add("output-schema", outputSchema, extensionOutput && snapshot.length === 0, !extensionOutput);
   const unused = unusedGrants(runningGrants, running.assertions).map(
     (grant) => `the declaration grants ${grant.action} on ${grant.resource}, which no read asserts: a source's grants are exactly what it asserts`
   );
@@ -11282,6 +11324,13 @@ function outsideGrants(assertions, grants, where) {
     }
   }
   return problems;
+}
+function snapshotDataProblems(answer, source) {
+  if (source.kind !== "snapshot" || source.outputSchema === void 0) return ["the source is an x- output and states no outputSchema"];
+  if (!plain5(answer)) return ["snapshot_read answered nothing: an object with data and asOf"];
+  const checked = fromJSONSchema(source.outputSchema).safeParse(answer["data"]);
+  if (checked.success) return [];
+  return checked.error.issues.map((issue) => `snapshot_read data at ${issue.path.length === 0 ? "the value" : issue.path.map(String).join(".")}: ${issue.message}`);
 }
 function identityOverlap(assertions, identityGrants, where) {
   const problems = [];

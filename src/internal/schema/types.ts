@@ -44,7 +44,7 @@ export interface SourceCommon {
 /** An events source: append-only items read with a cursor. */
 export interface SourceEvents extends SourceCommon {
   readonly kind: "events"
-  /** The thing it reads, such as `message`. */
+  /** The thing it reads: a core kind such as `message`, or `x-<namespace>/<name>`. */
   readonly reads: string
   /** Reads of one event's detail, called only with the event fields they name. */
   readonly details?: readonly Detail[] | undefined
@@ -61,8 +61,10 @@ export interface SourceEvents extends SourceCommon {
 /** A snapshot source: the latest state, read on demand. */
 export interface SourceSnapshot extends SourceCommon {
   readonly kind: "snapshot"
-  /** The name of its schema in the output registry. The registry is the app's; this is a name only. */
+  /** A registry name such as `agenda`, or `x-<namespace>/<name>`. The registry is the app's; this is a name only. */
   readonly output: string
+  /** An `x-` output's schema, inline: JSON Schema draft 2020-12. Required for `x-`, absent for a registry name. */
+  readonly outputSchema?: Readonly<Record<string, unknown>> | boolean | undefined
   /** The parameters a consumer may pass, resolved by the library at read time. */
   readonly params?: Readonly<Record<string, unknown>> | undefined
   /** The action its read tool asserts. */

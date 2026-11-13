@@ -51,6 +51,10 @@ export declare function readVerbProblem(name: unknown): string | undefined;
  * tool name and follows the same rule.
  */
 export declare function operationProblem(operation: unknown): string | undefined;
+/** An extension name: `x-<namespace>/<name>`, and its parts. */
+export declare const EXTENSION_NAME: RegExp;
+/** The most bytes an inline `outputSchema` may take, measured as compact JSON. */
+export declare const MAX_OUTPUT_SCHEMA_BYTES = 32768;
 /** Every field of a contract-1 event. */
 export declare const EVENT_FIELDS: readonly string[];
 /** The event fields a `details` entry may take its input from: identifiers, never an event's own prose. */

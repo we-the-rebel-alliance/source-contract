@@ -19,7 +19,7 @@ import type { Checked } from "./internal/checked.ts"
 import { EVENT_KINDS, isEventKind, MAX_BYTES } from "./internal/events.ts"
 import { problemsOf } from "./internal/validator.ts"
 import type { ParamSpec } from "./params.ts"
-import { isOutputName, OUTPUT_NAMES } from "./registry.ts"
+import { isExtensionOutput, isOutputName, OUTPUT_NAMES } from "./registry.ts"
 import { SOURCES_SCHEMA } from "./schema.ts"
 
 /** The most bytes a source may declare for one answer (1 MB), and the default when it declares none (64 KB): `events`' `MAX_BYTES`. */
@@ -58,8 +58,10 @@ export interface SourceItem {
   readonly input?: Readonly<Record<string, unknown>>
   /** An events source's event kind. */
   readonly reads?: string
-  /** A snapshot source's output, a registered schema. */
+  /** A snapshot source's output: a registry name, or `x-<namespace>/<name>`. */
   readonly output?: string
+  /** An `x-` output's schema, inline: JSON Schema draft 2020-12. Absent for a registry name. */
+  readonly outputSchema?: Readonly<Record<string, unknown>> | boolean
   readonly params?: Readonly<Record<string, ParamSpec>>
   readonly accounts?: { readonly named?: boolean }
   readonly scope?: {
@@ -156,7 +158,9 @@ const item = z
       if (source.output !== undefined) problem(["output"], "only a snapshot source has an output")
     } else {
       if (source.output === undefined) problem(["output"], `a snapshot source must name its output (${OUTPUT_NAMES.join(", ")})`)
-      else if (!isOutputName(source.output)) problem(["output"], `"${source.output}" is not a registered output (${OUTPUT_NAMES.join(", ")})`)
+      else if (!isOutputName(source.output) && !isExtensionOutput(source.output)) {
+        problem(["output"], `"${source.output}" is not a registered output (${OUTPUT_NAMES.join(", ")}) and not an x-<namespace>/<name>`)
+      }
       if (source.permission.tool === undefined) problem(["permission", "tool"], "a snapshot source must name its method's action")
       if (source.details !== undefined) problem(["details"], "only an events source has detail reads")
     }

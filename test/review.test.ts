@@ -524,6 +524,20 @@ describe("the conformance-only rules", () => {
     { rule: "a duplicate source id", item: () => base() },
     { rule: "a tool not declared read-only", item: () => base({ tool: "slack_send_message" }) },
     { rule: "a suggest operation also in the running grant", item: () => base({ scope: { keys: ["channels"], describe: "Channels", suggest: { tool: "slack_list_user_channels", operations: ["slack_list_user_channels"] } }, permission: { events: "slack_events_list", operations: ["slack_read_channel", "slack_list_user_channels"] } }) },
+    { rule: "an extension name in another namespace", item: () => base({ reads: "x-other/suggestion" }) },
+    {
+      rule: "an output schema over 32 KB",
+      item: () => ({
+        id: "mem.receipts",
+        kind: "snapshot",
+        tool: "snapshot_read",
+        output: "x-mem/receipt",
+        outputSchema: { type: "object", properties: Object.fromEntries(Array.from({ length: 900 }, (_, index) => [`k${index}`, { type: "string", description: "x".repeat(40) }])) },
+        accounts: { named: false },
+        permission: { tool: "mem.snapshot_read", operations: ["mem.receipts.list"] },
+        cost: { class: "free" },
+      }),
+    },
   ]
 
   const file = readFileSync(new URL("../test/conformance-only.json", import.meta.url), "utf8")

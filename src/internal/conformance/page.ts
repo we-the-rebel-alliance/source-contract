@@ -12,6 +12,7 @@
  */
 import type { SourceItem } from "../schema/types.ts"
 import { REFUSAL_REASONS, secretKinds } from "../events.ts"
+import { EXTENSION_NAME } from "./rules.ts"
 
 /** What a page is checked against. */
 export interface PageOptions {
@@ -76,6 +77,14 @@ export function pageChecks(answer: unknown, options: PageOptions): PageChecks {
       continue
     }
     seen.add(event["external_id"])
+    const kind = event["kind"]
+    if (typeof kind === "string" && EXTENSION_NAME.test(kind)) {
+      const namespace = options.source.id.split(".")[0] ?? options.source.id
+      const match = EXTENSION_NAME.exec(kind)
+      if (match !== null && match[1] !== namespace) {
+        shape.push(`${where} events[${index}] has the kind ${kind}, in the namespace "${match[1]}", and the source is in "${namespace}"`)
+      }
+    }
     // The family's screening, used here so a fixture proves it: an event carrying a secret belongs in refused[].
     const kinds = secretKinds([event["title"], event["text"]].filter((value) => typeof value === "string").join("\n"))
     if (kinds.length > 0) {

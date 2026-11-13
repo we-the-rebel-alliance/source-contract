@@ -295,11 +295,11 @@ describe("sourceConformance", () => {
     assert.equal(report.incomplete, false)
     assert.deepEqual(
       report.checks.map((check) => check.name),
-      ["declaration", "page-result", "failed-holds-cursor", "gap-and-cursor-expired", "refused-is-final", "billed-cost", "probe", "details", "suggest", "identity-grants", "unused-grants"],
+      ["declaration", "page-result", "failed-holds-cursor", "gap-and-cursor-expired", "refused-is-final", "billed-cost", "probe", "details", "suggest", "identity-grants", "output-schema", "unused-grants"],
     )
     assert.deepEqual(
       report.checks.filter((check) => !check.ran).map((check) => check.name),
-      ["billed-cost"],
+      ["billed-cost", "output-schema"],
     )
   })
 

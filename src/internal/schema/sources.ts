@@ -16,16 +16,20 @@ import { MAX_BYTES_DEFAULT, MAX_BYTES_LIMIT } from "./types.ts"
 const SOURCE_ID = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/
 /** A tool name: lowercase words joined by underscores. */
 const TOOL_NAME = /^[a-z][a-z0-9_]{0,63}$/
-/** What a source reads: a lowercase word. */
-const READS = /^[a-z][a-z0-9-]{0,31}$/
 /** A permission action: dotted (`gws.events_list`), or a namespaced tool (`slack_events_list`). */
 const ACTION = /^(?:[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$/
 /** A provider operation: a dotted API operation, or a bare MCP tool name. */
 const OPERATION = /^[A-Za-z][A-Za-z0-9._-]{0,199}$/
 /** A scope key: a lowercase word. */
 const SCOPE_KEY = /^[a-z][a-z0-9_]{0,31}$/
-/** A name in the output registry: a lowercase word. */
-const OUTPUT_NAME = /^[a-z][a-z0-9-]{0,31}$/
+/** A core name: a lowercase word. */
+const CORE_NAME = /^[a-z][a-z0-9-]{0,31}$/
+/** An extension name: `x-<namespace>/<name>`, both lowercase words. */
+const EXTENSION_NAME = /^x-[a-z][a-z0-9-]{0,31}\/[a-z][a-z0-9-]{0,31}$/
+/** A core name or an extension name. */
+const NAME_OR_EXTENSION = /^(?:[a-z][a-z0-9-]{0,31}|x-[a-z][a-z0-9-]{0,31}\/[a-z][a-z0-9-]{0,31})$/
+/** What a source reads: a core name, or an extension name. */
+const READS = NAME_OR_EXTENSION
 /** A price unit's name: a lowercase word. */
 const PRICE_PER = /^[a-z][a-z0-9-]{0,31}$/
 /** An exact host, or `*.` and a registrable domain. */
@@ -161,7 +165,11 @@ const events = z
   .object({
     ...common,
     kind: z.literal("events"),
-    reads: z.string().max(32).regex(READS, { error: "must be a lowercase word such as message" }).describe("The thing it reads."),
+    reads: z
+      .string()
+      .max(64)
+      .regex(READS, { error: "must be a core kind such as message, or x-<namespace>/<name>" })
+      .describe("The thing it reads: a core kind, or x-<namespace>/<name>."),
     details: z.array(detail).optional(),
     permission: permissionEvents,
     output: z.never({ error: "an events source has no output: output belongs to a snapshot" }).optional(),
@@ -177,9 +185,13 @@ const snapshot = z
     kind: z.literal("snapshot"),
     output: z
       .string()
-      .max(32)
-      .regex(OUTPUT_NAME, { error: "must be a lowercase name such as agenda" })
-      .describe("The name of its schema in the output registry. The registry itself is the app's."),
+      .max(64)
+      .regex(NAME_OR_EXTENSION, { error: "must be a registry name such as agenda, or x-<namespace>/<name>" })
+      .describe("A registry name, or x-<namespace>/<name>; an x- output carries its schema inline."),
+    outputSchema: z
+      .union([z.boolean(), z.looseObject({})])
+      .optional()
+      .describe("An x- output's schema, inline: JSON Schema draft 2020-12. Required for x-, absent for a registry name."),
     params: z.looseObject({}).optional().describe("The parameters a consumer may pass, resolved by the library at read time."),
     permission: permissionTool,
     maxAgeSec: z.int().min(1).optional().describe("How long a result may be reused before it is read again."),
@@ -188,6 +200,15 @@ const snapshot = z
   })
   .strict()
   .describe("A snapshot source: the latest state, read on demand.")
+  .superRefine((value, ctx) => {
+    const extension = EXTENSION_NAME.test(value.output)
+    if (extension && value.outputSchema === undefined) {
+      ctx.addIssue({ code: "custom", path: ["outputSchema"], message: "an x- output has no registry schema, so the item carries its outputSchema inline" })
+    }
+    if (!extension && value.outputSchema !== undefined) {
+      ctx.addIssue({ code: "custom", path: ["outputSchema"], message: "a registry output names its schema, so outputSchema belongs only to an x- output" })
+    }
+  })
 
 const source = z.discriminatedUnion("kind", [events, snapshot])
 

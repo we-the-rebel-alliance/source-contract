@@ -279,9 +279,9 @@
               },
               "reads": {
                 "type": "string",
-                "maxLength": 32,
-                "pattern": "^[a-z][a-z0-9-]{0,31}$",
-                "description": "The thing it reads."
+                "maxLength": 64,
+                "pattern": "^(?:[a-z][a-z0-9-]{0,31}|x-[a-z][a-z0-9-]{0,31}\\/[a-z][a-z0-9-]{0,31})$",
+                "description": "The thing it reads: a core kind, or x-<namespace>/<name>."
               },
               "details": {
                 "type": "array",
@@ -644,9 +644,22 @@
               },
               "output": {
                 "type": "string",
-                "maxLength": 32,
-                "pattern": "^[a-z][a-z0-9-]{0,31}$",
-                "description": "The name of its schema in the output registry. The registry itself is the app's."
+                "maxLength": 64,
+                "pattern": "^(?:[a-z][a-z0-9-]{0,31}|x-[a-z][a-z0-9-]{0,31}\\/[a-z][a-z0-9-]{0,31})$",
+                "description": "A registry name, or x-<namespace>/<name>; an x- output carries its schema inline."
+              },
+              "outputSchema": {
+                "description": "An x- output's schema, inline: JSON Schema draft 2020-12. Required for x-, absent for a registry name.",
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": {}
+                  }
+                ]
               },
               "params": {
                 "description": "The parameters a consumer may pass, resolved by the library at read time.",

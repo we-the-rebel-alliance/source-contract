@@ -155,6 +155,12 @@ export function operationProblem(operation: unknown): string | undefined {
   return undefined
 }
 
+/** An extension name: `x-<namespace>/<name>`, and its parts. */
+export const EXTENSION_NAME = /^x-([a-z][a-z0-9-]{0,31})\/([a-z][a-z0-9-]{0,31})$/
+
+/** The most bytes an inline `outputSchema` may take, measured as compact JSON. */
+export const MAX_OUTPUT_SCHEMA_BYTES = 32768
+
 /** Every field of a contract-1 event. */
 export const EVENT_FIELDS: readonly string[] = ["external_id", "kind", "occurred_at", "title", "text", "url", "thread", "actors", "labels", "hash"]
 
@@ -282,6 +288,27 @@ export function declarationProblems(sources: unknown, options: DeclarationOption
       }
     }
 
+    const namespace = item.id.split(".")[0] ?? item.id
+    const extension = (name: string): string | undefined => {
+      const match = EXTENSION_NAME.exec(name)
+      if (match === null) return undefined
+      if (match[1] !== namespace) return `"${name}" is in the namespace "${match[1]}", and this source is in "${namespace}"`
+      return undefined
+    }
+    if (item.kind === "events") {
+      const problem = extension(item.reads)
+      if (problem !== undefined) problems.push(`${at}.reads: ${problem}`)
+    } else {
+      const problem = extension(item.output)
+      if (problem !== undefined) problems.push(`${at}.output: ${problem}`)
+      if (EXTENSION_NAME.test(item.output)) {
+        const bytes = item.outputSchema === undefined ? 0 : new TextEncoder().encode(JSON.stringify(item.outputSchema)).length
+        if (bytes > MAX_OUTPUT_SCHEMA_BYTES) {
+          problems.push(`${at}.outputSchema is ${bytes} bytes of compact JSON, over the ${MAX_OUTPUT_SCHEMA_BYTES}-byte cap`)
+        }
+      }
+    }
+
     const details = item.kind === "events" ? (item.details ?? []) : []
     for (const [i, detail] of details.entries()) {
       const where = `${at}.details[${i}]`
@@ -370,6 +397,12 @@ function isSourceItem(value: unknown): value is SourceItem {
       if (!plain(suggest) || typeof suggest["tool"] !== "string" || !Array.isArray(suggest["operations"])) return false
       if (!suggest["operations"].every((operation) => typeof operation === "string")) return false
     }
+  }
+  if (kind === "events" && typeof value["reads"] !== "string") return false
+  if (kind === "snapshot") {
+    if (typeof value["output"] !== "string") return false
+    const schema = value["outputSchema"]
+    if (schema !== undefined && typeof schema !== "boolean" && !plain(schema)) return false
   }
   const hosts = value["urlHosts"]
   if (hosts !== undefined && (!Array.isArray(hosts) || !hosts.every((host) => typeof host === "string"))) return false

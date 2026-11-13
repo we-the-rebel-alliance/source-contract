@@ -1,3 +1,4 @@
+import * as z from "zod"
 /**
  * The conformance kit: one report per source, from a declaration and the plugin's own answers.
  *
@@ -149,6 +150,7 @@ const CHECKS = [
   "probe",
   "details",
   "suggest",
+  "output-schema",
   "unused-grants",
 ] as const
 
@@ -309,6 +311,8 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   add("suggest", suggest, suggested !== undefined, suggested === undefined)
 
   const snapshot: string[] = []
+  const outputSchema: string[] = []
+  const extensionOutput = !isEvents && /^x-/.test(source.output)
   if (!isEvents) {
     const snapshotCases = options.snapshotCases ?? []
     if (calls.snapshot === undefined) snapshot.push("the source is a snapshot and the kit has no snapshot call, so its grants cannot be checked")
@@ -316,8 +320,9 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
       for (const input of snapshotCases) {
         const assertedBeforeSnapshot = running.assertions.length
         try {
-          await calls.snapshot(input, context)
+          const answer = await calls.snapshot(input, context)
           identity.push(...identityOverlap(running.assertions.slice(assertedBeforeSnapshot), identityGrants, `snapshot_read(${JSON.stringify(input)})`))
+          if (extensionOutput) outputSchema.push(...snapshotDataProblems(answer, source))
         } catch (error) {
           snapshot.push(`snapshot_read(${JSON.stringify(input)}) failed: ${messageOf(error)}`)
         }
@@ -327,6 +332,8 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   }
 
   add("identity-grants", identity)
+  // An x- output has no registry schema: its inline outputSchema is what a snapshot's data must satisfy.
+  add("output-schema", outputSchema, extensionOutput && snapshot.length === 0, !extensionOutput)
 
   const unused = unusedGrants(runningGrants, running.assertions).map(
     (grant) => `the declaration grants ${grant.action} on ${grant.resource}, which no read asserts: a source's grants are exactly what it asserts`,
@@ -480,6 +487,18 @@ function outsideGrants(assertions: readonly Assertion[], grants: readonly Grant[
     }
   }
   return problems
+}
+
+/**
+ * A snapshot's `data` against the inline `outputSchema` of an `x-` output. The registry's names are checked by the app's
+ * `registry`, so this runs only for an extension.
+ */
+function snapshotDataProblems(answer: unknown, source: SourceItem): string[] {
+  if (source.kind !== "snapshot" || source.outputSchema === undefined) return ["the source is an x- output and states no outputSchema"]
+  if (!plain(answer)) return ["snapshot_read answered nothing: an object with data and asOf"]
+  const checked = z.fromJSONSchema(source.outputSchema as never).safeParse(answer["data"])
+  if (checked.success) return []
+  return checked.error.issues.map((issue) => `snapshot_read data at ${issue.path.length === 0 ? "the value" : issue.path.map(String).join(".")}: ${issue.message}`)
 }
 
 /** A content read may not assert an identity operation: those belong to the probe. */

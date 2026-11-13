@@ -16,7 +16,7 @@
  */
 import * as z from "zod"
 import type { Checked, Validator } from "./internal/checked.ts"
-import { validator } from "./internal/validator.ts"
+import { problemsOf, validator } from "./internal/validator.ts"
 
 const text = (max: number) => z.string().max(max)
 const httpsUrl = z
@@ -255,9 +255,26 @@ export function outputValidator(name: string): Validator<unknown> | undefined {
   return isOutputName(name) ? OUTPUTS[name] : undefined
 }
 
-/** `data` checked against the named output; a name the registry does not hold is a problem, not a throw. */
-export function checkOutput(name: string, data: unknown): Checked<unknown> {
+/** An extension name: `x-<namespace>/<name>`. Its schema travels with the source, inline. */
+export const EXTENSION_OUTPUT = /^x-[a-z][a-z0-9-]{0,31}\/[a-z][a-z0-9-]{0,31}$/
+
+/** True when `name` is an extension output, which the registry does not hold. */
+export function isExtensionOutput(name: unknown): name is string {
+  return typeof name === "string" && EXTENSION_OUTPUT.test(name)
+}
+
+/**
+ * `data` checked against the named output; a name the registry does not hold is a problem, not a throw.
+ *
+ * An `x-` output has no registry schema: `schema` is the source's inline `outputSchema`, and it is what validates.
+ */
+export function checkOutput(name: string, data: unknown, schema?: Readonly<Record<string, unknown>> | boolean): Checked<unknown> {
   const found = outputValidator(name)
-  if (!found) return { ok: false, problems: [`"${name}" is not a registered output (${OUTPUT_NAMES.join(", ")})`] }
-  return found.check(data)
+  if (found) return found.check(data)
+  if (isExtensionOutput(name)) {
+    if (schema === undefined) return { ok: false, problems: [`"${name}" is an extension output and its source states no outputSchema`] }
+    const checked = z.fromJSONSchema(schema as z.core.JSONSchema.JSONSchema).safeParse(data)
+    return checked.success ? { ok: true, value: checked.data } : { ok: false, problems: problemsOf(checked.error) }
+  }
+  return { ok: false, problems: [`"${name}" is not a registered output (${OUTPUT_NAMES.join(", ")})`] }
 }

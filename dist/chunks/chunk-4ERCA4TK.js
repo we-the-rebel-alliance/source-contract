@@ -1,7 +1,8 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
+  isExtensionOutput,
   outputValidator
-} from "./chunk-UGUA267L.js";
+} from "./chunk-6HDIB2SA.js";
 
 // src/pick.ts
 var MAX_PICK_PATHS = 50;
@@ -163,10 +164,14 @@ function pickProblems(paths, schema) {
   }
   return problems;
 }
-function pickProblemsForOutput(output, paths) {
+function pickProblemsForOutput(output, paths, schema) {
   const found = outputValidator(output);
-  if (!found) return [`"${output}" is not a registered output`];
-  return pickProblems(paths, found.jsonSchema());
+  if (found) return pickProblems(paths, found.jsonSchema());
+  if (isExtensionOutput(output)) {
+    if (schema === void 0) return [`"${output}" is an extension output and its source states no outputSchema`];
+    return pickProblems(paths, schema);
+  }
+  return [`"${output}" is not a registered output`];
 }
 
 export {

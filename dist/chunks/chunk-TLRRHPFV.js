@@ -11,8 +11,9 @@ import {
   number,
   object,
   string,
+  union,
   validator
-} from "./chunk-6RDMPYYW.js";
+} from "./chunk-W5SHR7DQ.js";
 
 // src/internal/schema/types.ts
 var MAX_BYTES_DEFAULT = 65536;
@@ -21,11 +22,12 @@ var MAX_BYTES_LIMIT = 1048576;
 // src/internal/schema/sources.ts
 var SOURCE_ID = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/;
 var TOOL_NAME = /^[a-z][a-z0-9_]{0,63}$/;
-var READS = /^[a-z][a-z0-9-]{0,31}$/;
 var ACTION = /^(?:[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$/;
 var OPERATION = /^[A-Za-z][A-Za-z0-9._-]{0,199}$/;
 var SCOPE_KEY = /^[a-z][a-z0-9_]{0,31}$/;
-var OUTPUT_NAME = /^[a-z][a-z0-9-]{0,31}$/;
+var EXTENSION_NAME = /^x-[a-z][a-z0-9-]{0,31}\/[a-z][a-z0-9-]{0,31}$/;
+var NAME_OR_EXTENSION = /^(?:[a-z][a-z0-9-]{0,31}|x-[a-z][a-z0-9-]{0,31}\/[a-z][a-z0-9-]{0,31})$/;
+var READS = NAME_OR_EXTENSION;
 var PRICE_PER = /^[a-z][a-z0-9-]{0,31}$/;
 var HOST = /^(?:\*\.)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
 var price = object({
@@ -90,7 +92,7 @@ var common = {
 var events = object({
   ...common,
   kind: literal("events"),
-  reads: string().max(32).regex(READS, { error: "must be a lowercase word such as message" }).describe("The thing it reads."),
+  reads: string().max(64).regex(READS, { error: "must be a core kind such as message, or x-<namespace>/<name>" }).describe("The thing it reads: a core kind, or x-<namespace>/<name>."),
   details: array(detail).optional(),
   permission: permissionEvents,
   output: never({ error: "an events source has no output: output belongs to a snapshot" }).optional(),
@@ -100,13 +102,22 @@ var events = object({
 var snapshot = object({
   ...common,
   kind: literal("snapshot"),
-  output: string().max(32).regex(OUTPUT_NAME, { error: "must be a lowercase name such as agenda" }).describe("The name of its schema in the output registry. The registry itself is the app's."),
+  output: string().max(64).regex(NAME_OR_EXTENSION, { error: "must be a registry name such as agenda, or x-<namespace>/<name>" }).describe("A registry name, or x-<namespace>/<name>; an x- output carries its schema inline."),
+  outputSchema: union([boolean(), looseObject({})]).optional().describe("An x- output's schema, inline: JSON Schema draft 2020-12. Required for x-, absent for a registry name."),
   params: looseObject({}).optional().describe("The parameters a consumer may pass, resolved by the library at read time."),
   permission: permissionTool,
   maxAgeSec: int().min(1).optional().describe("How long a result may be reused before it is read again."),
   reads: never({ error: "a snapshot has no reads: it is state, not a feed" }).optional(),
   details: never({ error: "a snapshot has no details: it has no events to read one of" }).optional()
-}).strict().describe("A snapshot source: the latest state, read on demand.");
+}).strict().describe("A snapshot source: the latest state, read on demand.").superRefine((value, ctx) => {
+  const extension = EXTENSION_NAME.test(value.output);
+  if (extension && value.outputSchema === void 0) {
+    ctx.addIssue({ code: "custom", path: ["outputSchema"], message: "an x- output has no registry schema, so the item carries its outputSchema inline" });
+  }
+  if (!extension && value.outputSchema !== void 0) {
+    ctx.addIssue({ code: "custom", path: ["outputSchema"], message: "a registry output names its schema, so outputSchema belongs only to an x- output" });
+  }
+});
 var source = discriminatedUnion("kind", [events, snapshot]);
 var sourcesSchema = object({
   contractVersion: literal(1),

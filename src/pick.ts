@@ -9,7 +9,7 @@
  *
  * A path is dotted segments; a segment ending in `[]` maps over an array: `items[].title`, `items[].attendees[].email`.
  */
-import { outputValidator } from "./registry.ts"
+import { isExtensionOutput, outputValidator } from "./registry.ts"
 
 /** At most this many paths in one pick (Artifacts' defaults). */
 export const MAX_PICK_PATHS = 50
@@ -225,9 +225,18 @@ export function pickProblems(paths: unknown, schema?: JsonSchema): string[] {
   return problems
 }
 
-/** `pickProblems` against a registered output by name; a name the registry does not hold is a problem. */
-export function pickProblemsForOutput(output: string, paths: unknown): string[] {
+/**
+ * `pickProblems` against an output by name; a name the registry does not hold is a problem.
+ *
+ * An `x-` output has no registry schema, so `schema` is its source's inline `outputSchema`, and the paths are checked
+ * against that.
+ */
+export function pickProblemsForOutput(output: string, paths: unknown, schema?: JsonSchema): string[] {
   const found = outputValidator(output)
-  if (!found) return [`"${output}" is not a registered output`]
-  return pickProblems(paths, found.jsonSchema())
+  if (found) return pickProblems(paths, found.jsonSchema())
+  if (isExtensionOutput(output)) {
+    if (schema === undefined) return [`"${output}" is an extension output and its source states no outputSchema`]
+    return pickProblems(paths, schema)
+  }
+  return [`"${output}" is not a registered output`]
 }

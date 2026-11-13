@@ -116,6 +116,15 @@ var EVENTS_LIST = "events_list";
 var EVENT_KINDS = ["message", "meeting", "session", "bookmark", "issue", "pr", "commit", "doc", "event", "task", "file"];
 var EXTENSION_KIND = /^x-[a-z][a-z0-9-]*\/[a-z][a-z0-9-]*$/;
 var isEventKind = (kind) => typeof kind === "string" && (EVENT_KINDS.includes(kind) || kind.length <= 64 && EXTENSION_KIND.test(kind));
+function extensionNamespace(kind) {
+  return isEventKind(kind) && kind.startsWith("x-") ? kind.slice(2, kind.indexOf("/")) : void 0;
+}
+function isEventKindIn(kind, namespace) {
+  if (!isEventKind(kind)) return false;
+  const own = extensionNamespace(kind);
+  return own === void 0 || own === namespace;
+}
+var sourceNamespace = (sourceId) => sourceId.split(".", 1)[0] ?? sourceId;
 var EVENT_LIMITS = {
   source: 64,
   account: 128,
@@ -363,6 +372,53 @@ function screenEvents(events, options = {}) {
   }
   return { events: kept, refused };
 }
+var PROBE = "probe";
+var PROBE_LIMITS = { scopes: 64, scope: 256 };
+function parseProbeInput(input) {
+  const value = input === void 0 || input === null ? {} : input;
+  if (!plainObject(value)) return { ok: false, problems: ["the input must be an object"] };
+  const problems = Object.keys(value).filter((key) => key !== "source" && key !== "account").map((key) => `"${key}" is not an input of probe`);
+  const { source, account } = value;
+  if (source !== void 0 && (typeof source !== "string" || source.length > EVENT_LIMITS.source || !SOURCE_PATTERN.test(source))) {
+    problems.push(`"source" must be a source's name, a lowercase word such as gmail`);
+  }
+  if (account !== void 0 && (typeof account !== "string" || account.length === 0 || account.length > EVENT_LIMITS.account || hasControl(account))) {
+    problems.push(`"account" must be a non-empty account name of at most ${EVENT_LIMITS.account} characters`);
+  }
+  if (problems.length > 0) return { ok: false, problems };
+  return { ok: true, value: { ...source === void 0 ? {} : { source }, ...account === void 0 ? {} : { account } } };
+}
+function probeResult(identity, extras = {}) {
+  return {
+    source: identity.source,
+    account: identity.account,
+    owner: { id: identity.owner.id, label: identity.owner.label },
+    ...extras.scopes === void 0 ? {} : { scopes: [...new Set(extras.scopes)] },
+    ...extras.cost === void 0 ? {} : { cost: extras.cost },
+    trust: TRUST
+  };
+}
+var PROBE_KEYS = ["source", "account", "owner", "scopes", "cost", "trust"];
+function probeResultProblems(result, expected = {}) {
+  if (!plainObject(result)) return ["the probe answer is not an object"];
+  const problems = [];
+  for (const key of Object.keys(result)) if (!PROBE_KEYS.includes(key)) problems.push(`the probe answer has the field "${key}": a probe reads no content, and the contract defines no such field`);
+  if (!line(result["source"], EVENT_LIMITS.source) || !SOURCE_PATTERN.test(result["source"])) problems.push("the probe answer's source must be a lowercase name such as gmail");
+  else if (expected.source !== void 0 && result["source"] !== expected.source) problems.push(`the probe answer names the source ${result["source"]}, not ${expected.source}`);
+  if (!line(result["account"], EVENT_LIMITS.account)) problems.push(`the probe answer's account must be a non-empty name of at most ${EVENT_LIMITS.account} characters`);
+  else if (expected.account !== void 0 && result["account"] !== expected.account) problems.push("the probe answer names another account than the one asked for");
+  const owner = result["owner"];
+  if (!plainObject(owner) || !line(owner["id"], EVENT_LIMITS.ownerId) || !line(owner["label"], EVENT_LIMITS.ownerLabel) || Object.keys(owner).some((key) => key !== "id" && key !== "label")) {
+    problems.push("the probe answer's owner must be { id, label }, two non-empty lines");
+  }
+  const scopes = result["scopes"];
+  if (scopes !== void 0 && (!Array.isArray(scopes) || scopes.length > PROBE_LIMITS.scopes || scopes.some((scope) => !line(scope, PROBE_LIMITS.scope)) || new Set(scopes).size !== scopes.length)) {
+    problems.push(`the probe answer's scopes must be at most ${PROBE_LIMITS.scopes} different lines of at most ${PROBE_LIMITS.scope} characters`);
+  }
+  if (result["cost"] !== void 0) problems.push(...extraProblems({ cost: result["cost"] }, /* @__PURE__ */ new Set()).map((problem) => problem.replace("the result's cost", "the probe answer's cost")));
+  if (result["trust"] !== TRUST) problems.push(`the probe answer's trust must be "${TRUST}"`);
+  return problems;
+}
 function eventsListResult(identity, events, cursor, more, extras = {}) {
   return {
     source: identity.source,
@@ -547,6 +603,9 @@ export {
   EVENT_KINDS,
   EXTENSION_KIND,
   isEventKind,
+  extensionNamespace,
+  isEventKindIn,
+  sourceNamespace,
   EVENT_LIMITS,
   PAGE,
   MAX_PAGE_BYTES,
@@ -575,6 +634,11 @@ export {
   oldestFirst,
   fitPage,
   screenEvents,
+  PROBE,
+  PROBE_LIMITS,
+  parseProbeInput,
+  probeResult,
+  probeResultProblems,
   eventsListResult,
   eventProblems,
   resultProblems

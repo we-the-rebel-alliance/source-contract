@@ -7,7 +7,16 @@ import "./chunks/chunk-HLVAKAYG.js";
 
 // src/tools-rpc.ts
 import { randomUUID } from "node:crypto";
-var toolsRpcId = (pluginId) => `${pluginId}.tools`;
+var TOOLS_RPC_SUFFIX = ".tools";
+var PLUGIN_ID_PATTERN = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*$/;
+var toolsRpcId = (pluginId) => `${pluginId}${TOOLS_RPC_SUFFIX}`;
+var isToolsRpcId = (id) => typeof id === "string" && id.length <= 214 && id.endsWith(TOOLS_RPC_SUFFIX) && PLUGIN_ID_PATTERN.test(id.slice(0, -TOOLS_RPC_SUFFIX.length));
+var pluginIdOf = (id) => isToolsRpcId(id) ? id.slice(0, -TOOLS_RPC_SUFFIX.length) : void 0;
+function toolsRpcIdProblems(declared, described) {
+  if (!isToolsRpcId(declared)) return ["the tools-RPC id must be the plugin id and .tools, such as google-workspace.gws.tools"];
+  if (described !== void 0 && described.id !== declared) return [`the plugin's describe reports the tools-RPC id ${String(described.id)}, not ${declared}`];
+  return [];
+}
 var CLASSES = ["read", "write", "send", "export", "destructive"];
 var MCP_ONLY = ["SERVER_CONFLICT", "AUTH_REQUIRED", "CONNECTING", "CONNECTION_FAILED", "DISABLED", "NOT_REGISTERED", "TOOL_UNAVAILABLE", "UPSTREAM_ERROR"];
 var UNATTENDED = "A script cannot answer an approval prompt; this needs an allow rule for the session's agent.";
@@ -166,6 +175,7 @@ async function registerToolsRpc(ctx, options) {
   const { mcp, methods, plugin } = options;
   const NEXT_STEPS = plugin.nextSteps;
   const TOOLS_RPC_ID = toolsRpcId(plugin.id);
+  if (!PLUGIN_ID_PATTERN.test(plugin.id)) throw new Error(`registerToolsRpc: the plugin id "${plugin.id}" must be lowercase dotted words, such as google-workspace.gws`);
   const shapeIn = options.shapers?.input ?? plugin.shapeInput ?? ((_method, input) => input);
   const shapeOut = options.shapers?.result ?? plugin.shapeResult ?? ((_method, result) => result);
   const pluginError = (error) => plugin.pluginError?.(error);
@@ -479,13 +489,18 @@ export {
   CLASSES,
   LOCATION_HEADER,
   LOCATION_HINT,
+  PLUGIN_ID_PATTERN,
   READ_VERBS,
   RESOURCE_PATTERN,
+  TOOLS_RPC_SUFFIX,
   defineRpc,
   evaluate,
   hidden,
+  isToolsRpcId,
+  pluginIdOf,
   readOperation,
   registerToolsRpc,
   toolsRpcId,
+  toolsRpcIdProblems,
   upstreamText
 };

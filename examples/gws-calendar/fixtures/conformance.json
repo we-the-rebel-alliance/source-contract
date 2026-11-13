@@ -143,7 +143,12 @@
             ],
             "cursor": "calendar:sam.rivera@example.com:sync:sync-1",
             "more": false,
-            "refused": [],
+            "refused": [
+              {
+                "external_id": "evt-e",
+                "reason": "the event is not the signed-in person's to read"
+              }
+            ],
             "failed": []
           }
         },
@@ -396,7 +401,10 @@
           "scopes": []
         }
       },
-      "details": []
+      "details": [],
+      "identity": [
+        "calendar.calendarList.get"
+      ]
     },
     "gws.calendar.today": {
       "cases": [],
@@ -424,7 +432,40 @@
           "scopes": []
         }
       },
-      "details": []
+      "details": [],
+      "identity": [
+        "calendar.calendars.get"
+      ],
+      "snapshot": {
+        "input": {
+          "params": {
+            "window": "today"
+          }
+        },
+        "asserts": [
+          {
+            "action": "gws.calendar_today",
+            "resource": "*"
+          },
+          {
+            "action": "gws.read",
+            "resource": "sam.rivera@example.com:calendar.calendars.get"
+          },
+          {
+            "action": "gws.read",
+            "resource": "sam.rivera@example.com:calendar.events.list"
+          }
+        ],
+        "answer": {
+          "data": {
+            "account": "sam.rivera@example.com",
+            "at": "2026-11-13T09:00:00.000Z",
+            "state": "ready",
+            "events": []
+          },
+          "asOf": "2026-11-13T09:00:00.000Z"
+        }
+      }
     }
   }
 }

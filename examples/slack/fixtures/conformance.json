@@ -204,6 +204,178 @@
           }
         },
         {
+          "name": "one message that could not be read holds the cursor back",
+          "input": {
+            "source": "slack",
+            "account": "T0PILOT01",
+            "cursor": "slack:C0PILOT001:C0PILOT003:1761998000.000100:held"
+          },
+          "expect": "page",
+          "asserts": [
+            {
+              "action": "slack_slack_read_channel",
+              "resource": "*"
+            }
+          ],
+          "answer": {
+            "source": "slack.workspace",
+            "plugin": "@joe-broadhead/opencode-slack",
+            "account": "T0PILOT01",
+            "owner": {
+              "id": "slack:U0PILOTOWN",
+              "label": "Pilot Owner"
+            },
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "trust": "untrusted",
+            "events": [
+              {
+                "kind": "message",
+                "external_id": "D0PILOT002:1761998000.000100",
+                "occurred_at": "2025-11-01T11:53:20.000Z",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "slack:U0PILOTOWN",
+                    "label": "Pilot Owner"
+                  }
+                ],
+                "text": "Done.",
+                "channel": "D0PILOT002",
+                "thread": "slack-thread:D0PILOT002:1761998000.000100",
+                "title": "Done.",
+                "url": "https://pilot.slack.com/archives/D0PILOT002/p1761998000000100",
+                "labels": [
+                  "dm",
+                  "channel:D0PILOT002"
+                ],
+                "hash": "sha256:e59847576e360ce480995d04444215bb22534984466f001ec32871313a551bcd"
+              },
+              {
+                "kind": "message",
+                "external_id": "C0PILOT001:1761996400.000100",
+                "occurred_at": "2025-11-01T11:26:40.000Z",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "slack:U0PILOTOWN",
+                    "label": "Pilot Owner"
+                  }
+                ],
+                "text": "Pasted from the vendor page:\n```\nNo Priority: this text is quoted from elsewhere, not written by me.\n```",
+                "thread": "slack-thread:C0PILOT001:1761996400.000100",
+                "title": "Pasted from the vendor page:",
+                "url": "https://pilot.slack.com/archives/C0PILOT001/p1761996400000100",
+                "labels": [
+                  "channel",
+                  "channel:C0PILOT001"
+                ],
+                "hash": "sha256:5638e040192e164bb5b7c6586518732a3af364d07a44d1cb6f4bae13dc85d628"
+              },
+              {
+                "kind": "message",
+                "external_id": "C0PILOT001:1761993100.000100",
+                "occurred_at": "2025-11-01T10:31:40.000Z",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "slack:U0PILOTOWN",
+                    "label": "Pilot Owner"
+                  }
+                ],
+                "text": "Let's go with Postgres.",
+                "thread": "slack-thread:C0PILOT001:1761993000.000100",
+                "title": "Let's go with Postgres.",
+                "url": "https://pilot.slack.com/archives/C0PILOT001/p1761993100000100?thread_ts=1761993000.000100&cid=C0PILOT001",
+                "labels": [
+                  "channel",
+                  "channel:C0PILOT001",
+                  "thread-reply"
+                ],
+                "hash": "sha256:41d0620f3e6e701128ee63f2700a55aa9cb4c4dc0c4dfc70151bf4841cc99453"
+              },
+              {
+                "kind": "message",
+                "external_id": "C0PILOT001:1761993000.000100",
+                "occurred_at": "2025-11-01T10:30:00.000Z",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "slack:U0PILOTAMA",
+                    "label": "Ama Mensah"
+                  }
+                ],
+                "text": "Postgres or SQLite for the queue?",
+                "thread": "slack-thread:C0PILOT001:1761993000.000100",
+                "title": "Postgres or SQLite for the queue?",
+                "url": "https://pilot.slack.com/archives/C0PILOT001/p1761993000000100",
+                "labels": [
+                  "channel",
+                  "channel:C0PILOT001",
+                  "thread-parent"
+                ],
+                "hash": "sha256:cc3da9e3579ff03b171f749540b179d766bb12e53e1726d1cc74ab8b61c3610f"
+              },
+              {
+                "kind": "message",
+                "external_id": "C0PILOT001:1761992800.000100",
+                "occurred_at": "2025-11-01T10:26:40.000Z",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "slack:U0PILOTOWN",
+                    "label": "Pilot Owner"
+                  }
+                ],
+                "text": "Harbour kickoff notes are in the canvas.",
+                "thread": "slack-thread:C0PILOT001:1761992800.000100",
+                "title": "Harbour kickoff notes are in the canvas.",
+                "url": "https://pilot.slack.com/archives/C0PILOT001/p1761992800000100",
+                "labels": [
+                  "channel",
+                  "channel:C0PILOT001"
+                ],
+                "hash": "sha256:3f40da048eee45dcf389db358e437df101109dcc32f7459b7d4bd241889b5af8"
+              },
+              {
+                "kind": "message",
+                "external_id": "D0PILOT002:1761992000.000100",
+                "occurred_at": "2025-11-01T10:13:20.000Z",
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "slack:U0PILOTAMA",
+                    "label": "Ama Mensah"
+                  }
+                ],
+                "text": "Can you review the doc?",
+                "channel": "D0PILOT002",
+                "thread": "slack-thread:D0PILOT002:1761992000.000100",
+                "title": "Can you review the doc?",
+                "url": "https://pilot.slack.com/archives/D0PILOT002/p1761992000000100",
+                "labels": [
+                  "dm",
+                  "channel:D0PILOT002"
+                ],
+                "hash": "sha256:6519565978be86fa115ee15c06c551331d699a48a39f4e6a30d61614be369e99"
+              }
+            ],
+            "cursor": "slack:C0PILOT001:C0PILOT003:1761998000.000100:held",
+            "more": true,
+            "refused": [
+              {
+                "external_id": "C0PILOT001:1761994600.000100",
+                "reason": "instruction-shaped text from another person"
+              }
+            ],
+            "failed": [
+              {
+                "external_id": "C0PILOT001:1761996400.000100",
+                "reason": "the provider answered RATE_LIMITED for this message"
+              }
+            ]
+          }
+        },
+        {
           "name": "an empty page still carries a cursor",
           "input": {
             "source": "slack",
@@ -729,6 +901,21 @@
             ],
             "failed": []
           }
+        },
+        {
+          "id": "slack.workspace.thread",
+          "scope": {
+            "channels": [
+              "C0PILOT001"
+            ]
+          },
+          "event": {
+            "thread": "slack-thread:C0PILOT003:1761996000.000100"
+          },
+          "expect": {
+            "refuses": "SCOPE_UNKNOWN"
+          },
+          "refuses": "SCOPE_UNKNOWN: that thread is in a channel nobody confirmed. Next step: confirm the channel it belongs to."
         }
       ],
       "suggest": {
@@ -754,7 +941,10 @@
             }
           ]
         }
-      }
+      },
+      "identity": [
+        "slack_read_user_profile"
+      ]
     }
   }
 }

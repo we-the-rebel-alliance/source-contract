@@ -3,24 +3,28 @@
  *
  * The kit runs the plugin's reads itself, through a recording permission whose rules are the grants the declaration
  * derives. So a read that asserts more than the declaration holds is refused where the host would refuse it, and a
- * grant no read asserts is reported at the end: declared equals asserted.
+ * grant no read asserts is reported at the end: declared equals asserted. There are two such sessions, and they never
+ * mix: the **running** session holds the source's own action and `permission.operations`, and the **bind** session holds
+ * only `scope.suggest`'s tool and operations, because a bind-time read never enters a running grant.
  *
- * The kit takes page results, cursors and permission contexts as inputs. It defines no page, cursor or permission of
- * its own: those are the `events`, `cursor` and `permission` modules' work.
+ * The kit takes page results, cursors and permission contexts as inputs. It defines no page, cursor or permission of its
+ * own: those are the `events`, `cursor` and `permission` modules' work.
  *
  * The calls it makes, which a plugin's test adapts to its own tools:
  *
  *   list({ ...input }, context)                 → the page result of events_list
  *   probe({ source, account? }, context)        → { account, owner, scopes? }
  *   details[id]({ account, scope, fields })     → the page result of one detail read
- *   suggest({ source, account }, context)       → { options: [{ id, label? }] }
+ *   suggest({ source, account }, context)       → { options: [{ id, label? }] }, in the bind session
+ *   snapshot({ params? }, context)              → the snapshot result, recorded for its grants only
  *
- * `context.permission.assert` is the session's permission: a read asserts the actions and operations it uses.
+ * `context.permission.assert` is that session's permission: a read asserts the actions and operations it uses.
  */
-import type { SourceItem } from "../schema/types.ts"
+import type { Detail, SourceItem } from "../schema/types.ts"
 import { declarationProblems, type ToolDeclaration } from "./rules.ts"
 import {
   assertionMatches,
+  bindGrantsFor,
   grantsFor,
   recordingPermission,
   unusedGrants,
@@ -28,7 +32,7 @@ import {
   type Grant,
   type SessionContext,
 } from "./permission.ts"
-import { instant, pageChecks, type PageOptions } from "./page.ts"
+import { pageChecks, type PageOptions } from "./page.ts"
 import { probeProblems } from "./probe.ts"
 import { detailInput, detailInputProblems, scopeProblems, type DetailCallInput } from "./details.ts"
 import { suggestProblems } from "./suggest.ts"
@@ -51,7 +55,7 @@ export interface PageCase {
   readonly expect?: CaseExpectation | undefined
 }
 
-/** One detail read and the scope it is pinned to. */
+/** One detail read: the event it names, the scope it is pinned to, and what it must answer. */
 export interface DetailCase {
   /** The detail's id, as the source declares it. */
   readonly id: string
@@ -59,6 +63,8 @@ export interface DetailCase {
   readonly scope?: Readonly<Record<string, readonly string[]>> | undefined
   /** The event's values for the fields the detail names. Default: the kit's synthetic event. */
   readonly event?: Readonly<Record<string, unknown>> | undefined
+  /** What the call must answer. Absent: an in-scope call, which must answer a page. A refusal: an event outside the scope. */
+  readonly expect?: Refusal | undefined
 }
 
 /** The plugin's reads, as the kit calls them. */
@@ -67,6 +73,8 @@ export interface ConformanceCalls {
   readonly probe: (input: Readonly<Record<string, unknown>>, context: SessionContext) => Promise<unknown>
   readonly details?: Readonly<Record<string, (input: DetailCallInput, context: SessionContext) => Promise<unknown>>> | undefined
   readonly suggest?: ((input: Readonly<Record<string, unknown>>, context: SessionContext) => Promise<unknown>) | undefined
+  /** A snapshot read: recorded for the grants it asserts. Its result's shape is not this kit's to check. */
+  readonly snapshot?: ((input: Readonly<Record<string, unknown>>, context: SessionContext) => Promise<unknown>) | undefined
 }
 
 /** What `sourceConformance` checks. */
@@ -81,50 +89,73 @@ export interface SourceConformanceOptions {
   readonly calls: ConformanceCalls
   /** The `events_list` calls and their expected answers. */
   readonly cases?: readonly PageCase[] | undefined
-  /** The detail reads to run. Default: every detail the source declares. */
+  /** The detail reads to run: at least one in scope, and one outside it when the source confirms scope keys. */
   readonly detailCases?: readonly DetailCase[] | undefined
+  /** The `snapshot_read` calls, whose grants are recorded. */
+  readonly snapshotCases?: readonly Readonly<Record<string, unknown>>[] | undefined
+  /** The operations the probe may assert, beyond the source's own action. §2.2 does not name them, so the kit asks. */
+  readonly identityOperations?: readonly string[] | undefined
   /** The account the kit hands a read; a display value, never a grant. */
   readonly account?: string | undefined
-  /** The grants to run under. Default: `grantsFor(source)`. */
+  /** The grants to run under. Default: the kit's provisional derivation from the declaration. */
   readonly grants?: readonly Grant[] | undefined
 }
 
-/** One named check: whether it ran, and what it found. */
+/** One named check: whether it ran, whether it applies at all, and what it found. */
 export interface ConformanceCheck {
   readonly name: string
   readonly ran: boolean
+  /** True when the check does not apply to this source, such as a page check on a snapshot. */
+  readonly notApplicable: boolean
   readonly problems: readonly string[]
 }
 
-/** A source's report. `ok` is true when every check that ran passed. */
+/** A source's report. `ok` is true only when every check ran or does not apply, and none found a problem. */
 export interface ConformanceReport {
   readonly source: string
   readonly plugin: string
   readonly checks: readonly ConformanceCheck[]
   readonly problems: readonly string[]
   readonly ok: boolean
+  /** True when a check applies and did not run: the report says nothing about it, so it is not ok. */
+  readonly incomplete: boolean
 }
 
 /** Where a source restarts when it reports an expired cursor without a hint of its own. */
 const RECOVERY_SINCE = "2026-01-01T00:00:00.000Z"
 
+const CHECKS = [
+  "declaration",
+  "page-result",
+  "failed-holds-cursor",
+  "gap-and-cursor-expired",
+  "refused-is-final",
+  "billed-cost",
+  "probe",
+  "details",
+  "suggest",
+  "unused-grants",
+] as const
+
 /**
  * Run every conformance check for one source.
  *
- * The checks, in order: `declaration`, `page-result`, `failed-holds-cursor`, `gap-and-cursor-expired`,
- * `refused-is-final`, `billed-cost`, `probe`, `details`, `suggest`, `unused-grants`.
+ * `ok` requires every check to have run, or not to apply: a check that applies and did not run leaves the report
+ * `incomplete` and not ok, so a source can never pass by having nothing to check.
  */
 export async function sourceConformance(options: SourceConformanceOptions): Promise<ConformanceReport> {
   const { plugin, source, tools, calls } = options
   const cases = options.cases ?? []
   const account = options.account ?? "conformance"
-  const grants = options.grants ?? grantsFor(source)
-  const recording = recordingPermission(grants)
-  const context: SessionContext = { account, permission: recording.permission }
+  const running = recordingPermission(options.grants ?? grantsFor(source))
+  const bind = recordingPermission(bindGrantsFor(source))
+  const context: SessionContext = { account, permission: running.permission }
+  const bindContext: SessionContext = { account, permission: bind.permission }
   const checks: ConformanceCheck[] = []
-  const add = (name: string, problems: readonly string[], ran = true): void => {
-    checks.push({ name, ran, problems })
+  const add = (name: string, problems: readonly string[], ran = true, notApplicable = false): void => {
+    checks.push({ name, ran, notApplicable, problems })
   }
+  const isEvents = source.kind === "events"
 
   add("declaration", declarationProblems({ contractVersion: 1, items: [source] }, { tools }))
 
@@ -136,7 +167,6 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   let sawFailed = false
   let sawRefused = false
   let sawGap = false
-  let sawExpiry = false
 
   if (cases.length > 0 && calls.list === undefined) shape.push("events_list cases are declared and the kit has no list call")
 
@@ -152,7 +182,7 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
         continue
       }
       if (expect === "expired") {
-        sawExpiry = true
+        sawGap = true
         gap.push(...(await expiredByError(where, error, { source, plugin, calls, context })))
         continue
       }
@@ -164,7 +194,7 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
       continue
     }
     if (expect === "expired") {
-      sawExpiry = true
+      sawGap = true
       gap.push(...(await expiredByGap(where, answer, { source, plugin, calls, context })))
       continue
     }
@@ -177,108 +207,167 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
     cost.push(...result.cost)
     sawFailed ||= hasEntries(answer, "failed")
     sawRefused ||= hasEntries(answer, "refused")
-    sawGap ||= plain(answer) && answer["gap"] !== undefined
-    if (expect === "empty" && Array.isArray((answer as Record<string, unknown>)["events"]) && ((answer as Record<string, unknown>)["events"] as unknown[]).length > 0) {
+    if (expect === "empty" && plain(answer) && Array.isArray(answer["events"]) && (answer["events"] as unknown[]).length > 0) {
       shape.push(`${where}: it must list nothing`)
     }
   }
-  add("page-result", shape, cases.length > 0)
-  add("failed-holds-cursor", cursor, sawFailed)
-  add("gap-and-cursor-expired", gap, sawGap || sawExpiry)
-  add("refused-is-final", refused, sawRefused)
-  add("billed-cost", cost, source.cost.class === "billed" && cases.length > 0)
+  add("page-result", shape, isEvents && cases.length > 0, !isEvents)
+  add("failed-holds-cursor", cursor, isEvents && sawFailed, !isEvents)
+  add("gap-and-cursor-expired", gap, isEvents && sawGap, !isEvents)
+  add("refused-is-final", refused, isEvents && sawRefused, !isEvents)
+  add("billed-cost", cost, source.cost.class === "billed" && isEvents, source.cost.class !== "billed")
 
   const probe: string[] = []
-  const assertedBeforeProbe = recording.assertions.length
+  const assertedBeforeProbe = running.assertions.length
   try {
     const answer = await calls.probe({ source: source.id, account }, context)
     probe.push(...probeProblems(answer, source))
   } catch (error) {
     probe.push(`probe(${source.id}) failed: ${messageOf(error)}`)
   }
-  const probeAssertions = recording.assertions.slice(assertedBeforeProbe)
+  const probeAssertions = running.assertions.slice(assertedBeforeProbe)
   if (probeAssertions.length === 0) probe.push(`probe(${source.id}) asserted nothing: it reads the identity under its own grant`)
-  probe.push(...outsideGrants(probeAssertions, grants, `probe(${source.id})`))
+  probe.push(...identityProblems(probeAssertions, source, options.identityOperations ?? []))
   add("probe", probe)
 
   const details: string[] = []
-  const declaredDetails = source.kind === "events" ? (source.details ?? []) : []
-  const detailCases: readonly DetailCase[] = options.detailCases ?? declaredDetails.map((detail) => ({ id: detail.id }))
-  for (const detailCase of detailCases) {
-    const detail = declaredDetails.find((entry) => entry.id === detailCase.id)
-    if (detail === undefined) {
-      details.push(`details(${detailCase.id}) is not declared by the source`)
-      continue
-    }
+  const declaredDetails = isEvents ? (source.details ?? []) : []
+  const detailCases: readonly DetailCase[] = options.detailCases ?? declaredDetails.flatMap((detail) => (isEvents ? [{ id: detail.id }] : []))
+  const scopeKeys = source.scope?.keys ?? []
+  for (const detail of declaredDetails) {
     const read = calls.details?.[detail.id]
     if (read === undefined) {
       details.push(`details(${detail.id}) is declared and the kit has no call for it`)
       continue
     }
-    const scope = detailCase.scope ?? {}
-    details.push(...scopeProblems(scope, source.scope, `details(${detail.id})`))
-    const input = detailInput(detail, source, { account, scope, ...(detailCase.event === undefined ? {} : { event: detailCase.event }) })
-    details.push(...detailInputProblems(detail, input))
-    const assertedBeforeDetail = recording.assertions.length
-    try {
-      const answer = await read(input, context)
-      const result = pageChecks(answer, { source, plugin, input: {} })
-      details.push(...result.shape, ...result.cursor, ...result.gap, ...result.refused, ...result.cost)
-    } catch (error) {
-      details.push(`details(${detail.id}) failed: ${messageOf(error)}`)
+    const own = detailCases.filter((entry) => entry.id === detail.id)
+    const inside = own.filter((entry) => entry.expect === undefined)
+    const outside = own.filter((entry) => entry.expect !== undefined)
+    for (const entry of own) await assertDetail(entry, detail, source, read, context, running, plugin, details)
+    if (inside.length === 0) details.push(`details(${detail.id}) has no case inside the confirmed scope`)
+    if (scopeKeys.length > 0 && outside.length === 0) {
+      details.push(`details(${detail.id}) has no case outside the confirmed scope: a read pinned to a scope must refuse one that is not`)
     }
-    details.push(...outsideGrants(recording.assertions.slice(assertedBeforeDetail), grants, `details(${detail.id})`))
   }
-  for (const detail of declaredDetails.filter((entry) => !detailCases.some((detailCase) => detailCase.id === entry.id))) {
-    details.push(`details(${detail.id}) is declared and no detail case ran it`)
+  for (const entry of detailCases) {
+    if (!declaredDetails.some((detail) => detail.id === entry.id)) details.push(`details(${entry.id}) is not declared by the source`)
   }
-  add("details", details, declaredDetails.length > 0)
+  add("details", details, declaredDetails.length > 0, declaredDetails.length === 0)
 
   const suggest: string[] = []
-  const suggestTool = source.scope?.suggest
-  if (suggestTool !== undefined) {
-    const assertedBeforeSuggest = recording.assertions.length
-    if (calls.suggest === undefined) suggest.push(`scope.suggest names "${suggestTool}" and the kit has no call for it`)
+  const suggested = source.scope?.suggest
+  if (suggested !== undefined) {
+    const assertedBeforeSuggest = bind.assertions.length
+    if (calls.suggest === undefined) suggest.push(`scope.suggest names "${suggested.tool}" and the kit has no call for it`)
     else {
       try {
-        const answer = await calls.suggest({ source: source.id, account }, context)
-        suggest.push(...suggestProblems(answer, `scope.suggest(${suggestTool})`))
+        const answer = await calls.suggest({ source: source.id, account }, bindContext)
+        suggest.push(...suggestProblems(answer, `scope.suggest(${suggested.tool})`))
       } catch (error) {
-        suggest.push(`scope.suggest(${suggestTool}) failed: ${messageOf(error)}`)
+        suggest.push(`scope.suggest(${suggested.tool}) failed: ${messageOf(error)}`)
       }
-      const suggestAssertions = recording.assertions.slice(assertedBeforeSuggest)
-      if (suggestAssertions.length === 0) suggest.push(`scope.suggest(${suggestTool}) asserted nothing: even at bind it reads under the grant`)
-      suggest.push(...outsideGrants(suggestAssertions, grants, `scope.suggest(${suggestTool})`))
+      const suggestAssertions = bind.assertions.slice(assertedBeforeSuggest)
+      if (suggestAssertions.length === 0) suggest.push(`scope.suggest(${suggested.tool}) asserted nothing: even at bind it reads under the grant`)
+      suggest.push(...outsideGrants(suggestAssertions, bindGrantsFor(source), `scope.suggest(${suggested.tool})`))
+      for (const grant of unusedGrants(bindGrantsFor(source), bind.assertions)) {
+        suggest.push(`the bind declaration grants ${grant.action} on ${grant.resource}, which no bind-time read asserts: a suggest operation is exactly what it asserts`)
+      }
     }
   }
-  add("suggest", suggest, suggestTool !== undefined)
+  add("suggest", suggest, suggested !== undefined, suggested === undefined)
 
-  const unused =
-    source.kind === "events" && cases.length > 0
-      ? unusedGrants(grants, recording.assertions).map(
-          (grant) => `the declaration grants ${grant.action} on ${grant.resource}, which no read asserts: a source's grants are exactly what it asserts`,
-        )
-      : []
-  add("unused-grants", unused, source.kind === "events" && cases.length > 0)
+  const snapshot: string[] = []
+  if (!isEvents) {
+    const snapshotCases = options.snapshotCases ?? []
+    if (calls.snapshot === undefined) snapshot.push("the source is a snapshot and the kit has no snapshot call, so its grants cannot be checked")
+    else {
+      for (const input of snapshotCases) {
+        try {
+          await calls.snapshot(input, context)
+        } catch (error) {
+          snapshot.push(`snapshot_read(${JSON.stringify(input)}) failed: ${messageOf(error)}`)
+        }
+      }
+      if (snapshotCases.length === 0) snapshot.push("the source is a snapshot and no snapshot case ran")
+    }
+  }
 
-  if (recording.undeclared.length > 0) {
+  const unused = unusedGrants(options.grants ?? grantsFor(source), running.assertions).map(
+    (grant) => `the declaration grants ${grant.action} on ${grant.resource}, which no read asserts: a source's grants are exactly what it asserts`,
+  )
+  const unusedRan = isEvents ? cases.length > 0 : snapshot.length === 0
+  add("unused-grants", [...unused, ...snapshot], unusedRan, false)
+
+  if (running.undeclared.length > 0 || bind.undeclared.length > 0) {
     checks.push({
       name: "undeclared-grants",
       ran: true,
-      problems: recording.undeclared.map((action) => `${action} was asserted and is not among the grants the declaration derives`),
+      notApplicable: false,
+      problems: [...running.undeclared, ...bind.undeclared].map((action) => `${action} was asserted and is not among the grants the declaration derives`),
     })
   }
 
   const problems = checks.flatMap((check) => check.problems)
-  return { source: source.id, plugin, checks, problems, ok: problems.length === 0 }
+  const incomplete = checks.some((check) => !check.ran && !check.notApplicable)
+  return { source: source.id, plugin, checks, problems, ok: problems.length === 0 && !incomplete, incomplete }
 }
 
 /** `sourceConformance`, for a test or a check: throws one error naming every problem. */
 export function assertConformance(report: ConformanceReport): void {
   if (report.ok) return
-  throw new Error(
-    `CONFORMANCE_FAILED: the source ${report.source} of ${report.plugin} fails ${report.checks.filter((check) => check.problems.length > 0).length} checks. Next step: fix each problem listed.\n- ${report.problems.join("\n- ")}`,
-  )
+  const failed = report.checks.filter((check) => check.problems.length > 0).length
+  const missing = report.checks.filter((check) => !check.ran && !check.notApplicable).map((check) => check.name)
+  const why = [
+    ...(failed > 0 ? [`${failed} checks failed`] : []),
+    ...(missing.length > 0 ? [`${missing.join(", ")} did not run`] : []),
+  ].join(", and ")
+  throw new Error(`CONFORMANCE_FAILED: the source ${report.source} of ${report.plugin} is not conformant: ${why}. Next step: fix each problem listed.\n- ${report.problems.join("\n- ")}`)
+}
+
+/**
+ * One detail read. Inside the confirmed scope it must answer a page and assert only the source's grants; outside the
+ * scope, which is the event the fixture names, it must be refused: a read pinned to what a person confirmed never reads
+ * past it.
+ */
+async function assertDetail(
+  entry: DetailCase,
+  detail: Detail,
+  source: SourceItem,
+  read: (input: DetailCallInput, context: SessionContext) => Promise<unknown>,
+  context: SessionContext,
+  running: ReturnType<typeof recordingPermission>,
+  plugin: string,
+  problems: string[],
+): Promise<void> {
+  const where = `details(${detail.id})`
+  const scope = entry.scope ?? {}
+  problems.push(...scopeProblems(scope, source.scope, where))
+  const input = detailInput(detail, source, {
+    account: context.account,
+    scope,
+    ...(entry.event === undefined ? {} : { event: entry.event }),
+  })
+  if (entry.expect !== undefined) {
+    try {
+      await read(input, context)
+      problems.push(`${where} answered a call outside the confirmed scope: it must be refused with ${entry.expect.refuses}`)
+    } catch (error) {
+      if (!messageOf(error).includes(entry.expect.refuses)) {
+        problems.push(`${where} refused an out-of-scope call with "${messageOf(error)}", not the expected ${entry.expect.refuses}`)
+      }
+    }
+    return
+  }
+  problems.push(...detailInputProblems(detail, input))
+  const assertedBefore = running.assertions.length
+  try {
+    const answer = await read(input, context)
+    const result = pageChecks(answer, { source, plugin, input: {}, detail: true })
+    problems.push(...result.shape, ...result.cursor, ...result.gap, ...result.refused, ...result.cost)
+  } catch (error) {
+    problems.push(`${where} failed inside the confirmed scope: ${messageOf(error)}`)
+  }
+  problems.push(...outsideGrants(running.assertions.slice(assertedBefore), grantsFor(source), where))
 }
 
 /** The word or code an error carries, for a refusal case. */
@@ -316,7 +405,7 @@ async function expiredByGap(
   return problems.map((problem) => `${where} after the restart: ${problem}`)
 }
 
-/** An expired cursor answered with an error: the backfill hint must read on. */
+/** An expired cursor answered with an error: it must be CURSOR_EXPIRED, and its backfill hint must read on. */
 async function expiredByError(
   where: string,
   error: unknown,
@@ -324,18 +413,19 @@ async function expiredByError(
 ): Promise<string[]> {
   const message = messageOf(error)
   if (!/^CURSOR_EXPIRED: /.test(message)) return [`${where}: failed with "${message}", not CURSOR_EXPIRED or a gap`]
-  const since = instant((error as { since?: unknown }).since) ? ((error as { since: string }).since) : RECOVERY_SINCE
+  const since = String((error as { since?: unknown }).since ?? "")
+  const hint = /(?:Z|[+-]\d{2}:\d{2})$/.test(since) && !Number.isNaN(Date.parse(since)) ? since : RECOVERY_SINCE
   let next: unknown
   try {
-    next = await options.calls.list?.({ since }, options.context)
-  } catch (error) {
-    return [`${where} after the restart: failed with ${messageOf(error)}`]
+    next = await options.calls.list?.({ since: hint }, options.context)
+  } catch (failed) {
+    return [`${where} after the restart: failed with ${messageOf(failed)}`]
   }
-  const checks = pageChecks(next, { source: options.source, plugin: options.plugin, input: { since } })
+  const checks = pageChecks(next, { source: options.source, plugin: options.plugin, input: { since: hint } })
   return [...checks.shape, ...checks.cursor].map((problem) => `${where} after the restart: ${problem}`)
 }
 
-/** Every assertion a read made that its own source does not grant. */
+/** Every assertion a read made that its own session does not grant. */
 function outsideGrants(assertions: readonly Assertion[], grants: readonly Grant[], where: string): string[] {
   const problems: string[] = []
   for (const assertion of assertions) {
@@ -343,6 +433,30 @@ function outsideGrants(assertions: readonly Assertion[], grants: readonly Grant[
     for (const resource of resources) {
       const held = grants.some((grant) => assertionMatches([{ action: assertion.action, resources: [resource] }], grant))
       if (!held) problems.push(`${where} asserts ${assertion.action} on ${resource}, which the source does not grant: a read asserts only its own grant`)
+    }
+  }
+  return problems
+}
+
+/** A probe may assert the source's own action and its identity operations, and nothing else. */
+function identityProblems(assertions: readonly Assertion[], source: SourceItem, identityOperations: readonly string[]): string[] {
+  const action = source.kind === "events" ? source.permission.events : source.permission.tool
+  const head = source.id.split(".")[0] ?? source.id
+  const allowed: Grant[] = [{ action, resource: "*" }]
+  for (const operation of identityOperations) {
+    allowed.push(
+      operation.includes(".")
+        ? { action: `${head}.read`, resource: `{account}:${operation}` }
+        : { action: `${head}_${operation}`, resource: "*" },
+    )
+  }
+  const problems: string[] = []
+  for (const assertion of assertions) {
+    const resources = assertion.resources.length > 0 ? assertion.resources : ["*"]
+    for (const resource of resources) {
+      if (!allowed.some((grant) => assertionMatches([{ action: assertion.action, resources: [resource] }], grant))) {
+        problems.push(`probe(${source.id}) asserts ${assertion.action} on ${resource}, which is not an identity operation: a probe reads the account, never content`)
+      }
     }
   }
   return problems

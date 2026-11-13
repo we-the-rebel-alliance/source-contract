@@ -14,10 +14,10 @@
  * The rules a JSON Schema cannot express are `declarationProblems`: the read-verb and joiner lists, the namespace of an
  * action, the `urlHosts` suffix rules, and uniqueness. Everything the generated schema can carry is in `./schema`.
  */
-export { assertDeclaration, declarationProblems, nameProblem, operationProblem, readVerbProblem, urlHostProblem } from "./internal/conformance/rules.js";
-export { CORE_KINDS, DETAIL_FIELDS, EVENT_FIELDS, JOINERS, READ_VERBS, WRITE_VERBS } from "./internal/conformance/rules.js";
+export { assertDeclaration, declarationProblems, nameProblem, operationProblem, publicSuffixOf, readVerbProblem, urlHostProblem } from "./internal/conformance/rules.js";
+export { DETAIL_FIELDS, EVENT_FIELDS, JOINERS, READ_VERBS, WRITE_VERBS, tokensOf } from "./internal/conformance/rules.js";
 export type { DeclarationOptions, ToolDeclaration } from "./internal/conformance/rules.js";
-export { assertionMatches, grantsFor, recordingPermission, sameResource, unusedGrants } from "./internal/conformance/permission.js";
+export { assertionMatches, recordingPermission, sameResource, unusedGrants } from "./internal/conformance/permission.js";
 export type { AssertInput, Assertion, Grant, RecordingPermission, SessionContext } from "./internal/conformance/permission.js";
 export { instant, pageChecks, pageProblems } from "./internal/conformance/page.js";
 export type { PageChecks, PageOptions } from "./internal/conformance/page.js";

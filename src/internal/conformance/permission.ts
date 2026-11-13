@@ -39,24 +39,44 @@ export interface RecordingPermission {
 const key = (action: string, resource: string): string => `${action}\u0000${resource}`
 
 /**
- * The grants a source's declaration derives, which are the session's exact rules.
+ * The grants a source's declaration derives, which are the running session's exact rules.
  *
- * §2.2 keeps `permission.operations` and the tool's action, not the grants themselves, because a grant is derived,
- * never hand-written. A dotted operation is the account's own resource on the plugin's read action
- * (`gws.read` on `{account}:gmail.users.messages.get`); a bare operation is an MCP tool's own action
+ * **Provisional.** The app's `permission` module owns this derivation; until it lands, the kit derives the grants itself
+ * so a plugin can pass conformance, and a caller may pass its own with `grants`. §2.2 keeps `permission.operations` and
+ * the tool's action, not the grants themselves: a dotted operation is the account's own resource on the plugin's read
+ * action (`gws.read` on `{account}:gmail.users.messages.get`), and a bare operation is an MCP tool's own action
  * (`slack_slack_read_channel` on `*`). Both forms are what the gws and Slack pilots assert.
+ *
+ * Not exported from the package: it is the kit's own reading, not a contract.
  */
 export function grantsFor(source: SourceItem): Grant[] {
-  const head = source.id.split(".")[0] ?? source.id
   const action = source.kind === "events" ? source.permission.events : source.permission.tool
   const grants: Grant[] = [{ action, resource: "*" }]
-  for (const operation of source.permission.operations) {
-    const grant: Grant = operation.includes(".")
-      ? { action: `${head}.read`, resource: `{account}:${operation}` }
-      : { action: `${head}_${operation}`, resource: "*" }
-    if (!grants.some((held) => held.action === grant.action && held.resource === grant.resource)) grants.push(grant)
-  }
+  for (const operation of source.permission.operations) addGrant(grants, source, operation)
   return grants
+}
+
+/**
+ * The grants of the **bind** session: only `scope.suggest`'s tool and operations. They never enter a running grant, so
+ * they are a separate session with its own unused check.
+ */
+export function bindGrantsFor(source: SourceItem): Grant[] {
+  const suggest = source.scope?.suggest
+  if (suggest === undefined) return []
+  const action = source.kind === "events" ? source.permission.events : source.permission.tool
+  const head = source.id.split(".")[0] ?? source.id
+  const grants: Grant[] = [{ action: action.includes(".") ? `${head}.${suggest.tool}` : `${head}_${suggest.tool}`, resource: "*" }]
+  for (const operation of suggest.operations) addGrant(grants, source, operation)
+  return grants
+}
+
+/** One operation's grant, as the same derivation makes it. */
+function addGrant(grants: Grant[], source: SourceItem, operation: string): void {
+  const head = source.id.split(".")[0] ?? source.id
+  const grant: Grant = operation.includes(".")
+    ? { action: `${head}.read`, resource: `{account}:${operation}` }
+    : { action: `${head}_${operation}`, resource: "*" }
+  if (!grants.some((held) => held.action === grant.action && held.resource === grant.resource)) grants.push(grant)
 }
 
 /** `{account}` is a wildcard for the account a call names; everything else must match exactly, or by `*`. */

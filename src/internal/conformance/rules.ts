@@ -6,6 +6,7 @@
  * generated JSON Schema (`dist/schemas/sources.json`) carries every shape it can; each rule here says why it cannot.
  */
 import { SOURCES_SCHEMA } from "../../schema.ts"
+import { PUBLIC_SUFFIX_RULES } from "./public-suffix-list.ts"
 import type { Detail, SourceItem } from "../schema/types.ts"
 
 /** A tool the plugin declares, as its manifest lists it. */
@@ -21,24 +22,111 @@ export interface DeclarationOptions {
   readonly tools?: readonly ToolDeclaration[] | undefined
 }
 
-/** The verbs a read's name, and a provider operation, may carry. `fetch` is not one: it can send data out. */
-export const READ_VERBS: readonly string[] = ["read", "get", "list", "search", "lookup", "view", "describe", "history", "query", "count", "status"]
+/**
+ * The verbs a read may be named with, as tokens of a name: `get`, `list`, `read`, `search`, `query`, `fetch`, `count`,
+ * `describe`, `probe`, `export`, `instances`, `status`, `lookup`, `view`, `history`, `find`.
+ *
+ * `export` and `instances` are reads here because a provider's own operation says so (`drive.files.export`,
+ * `calendar.events.instances`). A plugin whose write tool is named `export` is still a write: the declaration says
+ * `readOnly: true` for a read, and that is what conformance checks.
+ */
+export const READ_VERBS: readonly string[] = ["get", "list", "read", "search", "query", "fetch", "count", "describe", "probe", "export", "instances", "status", "lookup", "view", "history", "find"]
 
 /**
- * Verbs that change something or send something out. A read's name, and an operation, may contain none.
+ * The verbs that change something or send something out, as tokens. A name is refused when its own verb is one of
+ * these; a write word in an object position is fine (`get_issue`, `list_deleted_items`).
  *
  * One string split at load, so the list is one line of data: a bundled array of quoted words would put "import" beside a
  * quote, and `npm run check:dist` reads that as an import statement.
  */
-const WRITE_VERB_WORDS = `send create update delete write post remove add set schedule upload download archive unarchive move merge close reopen approve reject share invite react draft complete run exec execute edit patch put push commit comment reply message broadcast follow block mute pin unpin star assign label lock trash forward dispatch clear flush reset truncate overwrite apply join leave ban toggle kick unban export grant revoke transfer promote demote rename duplicate restore purge wipe drop attach detach notify escalate resolve decline cancel submit vote snooze dismiss acknowledge ack enable disable connect disconnect login logout signin signout mint issue verify hide unhide publish unpublish ingest index reindex sync import save like unlike generate mark bookmark copy print convert`
+const WRITE_VERB_WORDS = `send create update delete write post remove add set schedule upload download archive unarchive move merge close reopen approve reject share invite react draft complete run exec execute edit patch put push commit comment reply message broadcast follow block mute pin unpin star assign label lock trash forward dispatch clear flush reset truncate overwrite apply join leave ban toggle kick unban grant revoke transfer promote demote rename duplicate restore purge wipe drop attach detach notify escalate resolve decline cancel submit vote snooze dismiss acknowledge ack enable disable connect disconnect login logout signin signout mint issue verify hide unhide publish unpublish ingest index reindex sync import save like unlike generate mark bookmark print convert insert modify watch untrash empty mention subscribe unsubscribe subscribe pause resume retry rollback`
 
 export const WRITE_VERBS: readonly string[] = WRITE_VERB_WORDS.split(" ")
 
-/** Tokens that join two actions in one name (`get_and_save`): a name is one action, so these are refused. */
+/** Tokens that join two actions in one name (`get_and_save`, `getAndSend`): a name is one action. */
 export const JOINERS: readonly string[] = ["and", "then", "or"]
 
-/** The event kinds of contract version 1 (§2.1). A plugin adds `x-<plugin>/<kind>`. */
-export const CORE_KINDS: readonly string[] = ["message", "meeting", "session", "bookmark", "issue", "pr", "commit", "doc", "event", "task", "file"]
+const READ = new Set(READ_VERBS)
+const WRITE = new Set(WRITE_VERBS)
+const JOIN = new Set(JOINERS)
+
+const isVerb = (token: string): boolean => READ.has(token) || WRITE.has(token)
+
+/**
+ * A name split into tokens: on snake, kebab, dot and space, and at each camelCase boundary. `getAndSend` is
+ * `get and send`, `gmail.users.messages.get` is `gmail users messages get`, and `batchGet` is `batch get`.
+ */
+export function tokensOf(name: unknown): string[] {
+  return String(name ?? "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .split(/[._\-\s]+/)
+    .filter((token) => token !== "")
+    .map((token) => token.toLowerCase())
+}
+
+/** Why a name joins two actions, or undefined when it names one. */
+function joinerProblem(name: string, tokens: readonly string[]): string | undefined {
+  for (let index = 1; index < tokens.length - 1; index++) {
+    const token = tokens[index] ?? ""
+    const next = tokens[index + 1] ?? ""
+    if (JOIN.has(token) && isVerb(next)) return `"${name}" joins two actions with "${token}": name the one action it is`
+  }
+  return undefined
+}
+
+/** The first token of a name that is a verb, with its index, or undefined when the name has none. */
+function firstVerb(tokens: readonly string[]): { readonly verb: string; readonly index: number } | undefined {
+  for (const [index, token] of tokens.entries()) if (isVerb(token)) return { verb: token, index }
+  return undefined
+}
+
+/**
+ * Why a name is not a read's, or undefined when it is one.
+ *
+ * The name's own verb is the first token that is a verb: a read verb makes it a read, a write verb refuses it. The verb's
+ * position is not fixed, because a name may put it after a namespace (`events_list`, `slack_read_channel`) or lead with
+ * it (`get_issue`). A write word in an object position is no verb at all here (`get_issue` is a read of an issue). A name
+ * with no verb is a noun name (`calendar_today`), which §2.2's own tools allow.
+ */
+export function nameProblem(name: unknown): string | undefined {
+  if (typeof name !== "string" || name.length === 0) return "a read must be named"
+  const tokens = tokensOf(name)
+  const joiner = joinerProblem(name, tokens)
+  if (joiner !== undefined) return joiner
+  const verb = firstVerb(tokens)
+  if (verb !== undefined && WRITE.has(verb.verb)) return `"${name}" carries the write verb ${verb.verb} where the name should carry the read's own verb`
+  return undefined
+}
+
+/** `nameProblem`, and the name must carry a read verb. Memory's stricter form, for a read a consumer names. */
+export function readVerbProblem(name: unknown): string | undefined {
+  const problem = nameProblem(name)
+  if (problem !== undefined) return problem
+  const verb = firstVerb(tokensOf(name))
+  if (verb === undefined) return `"${String(name)}" carries no read verb (${READ_VERBS.join(", ")})`
+  return undefined
+}
+
+/**
+ * Why an operation is not a read's, or undefined when it is one.
+ *
+ * A dotted operation (`gmail.users.messages.get`) is a provider call, and its last segment is where its verb sits: the
+ * first token of that segment that is a verb must be a read verb, so `insert`, `batchModify`, `watch`, `untrash` and
+ * `emptyTrash` are refused without being listed, while `batchGet`, `export` and `instances` are reads. A bare operation
+ * (`slack_read_channel`) is an MCP tool name and follows the same rule. An operation with no verb at all is refused: an
+ * operation names how it reads.
+ */
+export function operationProblem(operation: unknown): string | undefined {
+  if (typeof operation !== "string" || operation.length === 0) return "an operation must be named"
+  const joiner = joinerProblem(operation, tokensOf(operation))
+  if (joiner !== undefined) return joiner
+  const segment = operation.includes(".") ? (operation.split(".").pop() ?? "") : operation
+  const verb = firstVerb(tokensOf(segment))
+  if (verb === undefined) return `"${operation}" carries no read verb in "${segment}" (${READ_VERBS.join(", ")}): a read never sends, changes or watches`
+  if (WRITE.has(verb.verb)) return `"${operation}" carries the write verb ${verb.verb} in "${segment}": a read never sends, changes or watches`
+  return undefined
+}
 
 /** Every field of a contract-1 event. */
 export const EVENT_FIELDS: readonly string[] = ["external_id", "kind", "occurred_at", "title", "text", "url", "thread", "actors", "labels", "hash"]
@@ -50,75 +138,14 @@ const plain = (value: unknown): value is Record<string, unknown> => typeof value
 const words = (name: unknown): string[] => String(name ?? "").toLowerCase().split(/[._-]+/).filter(Boolean)
 const unique = <T>(values: readonly T[]): T[] => [...new Set(values)]
 
-/**
- * Why a name is not a read's, or undefined when it is one: it carries no write verb anywhere and names one action.
- *
- * §2.2's rule is that a write verb in a name is refused, and that a compound name is refused; a name such as
- * `calendar_today` is a read's name without being a verb, so this check does not require one.
- */
-export function nameProblem(name: unknown): string | undefined {
-  if (typeof name !== "string" || name.length === 0) return "a read must be named"
-  const parts = words(name)
-  const joiner = parts.find((word) => JOINERS.includes(word))
-  if (joiner !== undefined) return `"${name}" joins two actions with "${joiner}": name the one action it is`
-  const writes = parts.filter((word) => WRITE_VERBS.includes(word))
-  if (writes.length > 0) return `"${name}" contains the write verb ${writes.join(", ")}`
-  return undefined
-}
-
-/** `nameProblem`, and the name must also carry a read verb. Memory's stricter form, for a read a consumer names. */
-export function readVerbProblem(name: unknown): string | undefined {
-  const problem = nameProblem(name)
-  if (problem !== undefined) return problem
-  if (!words(name).some((word) => READ_VERBS.includes(word))) return `"${String(name)}" has no read verb (${READ_VERBS.join(", ")})`
-  return undefined
-}
-
-/**
- * Why an operation is not a read's, or undefined when it is one.
- *
- * A dotted operation (`gmail.users.messages.get`) is a provider call, and its last segment's verb is the allowlist, so
- * `insert`, `batchModify`, `watch` and `untrash` are refused without being listed. A bare operation
- * (`slack_read_channel`) is an MCP tool name, and one of its words is the read verb. Either way, a write verb anywhere
- * is refused first.
- */
-export function operationProblem(operation: unknown): string | undefined {
-  if (typeof operation !== "string" || operation.length === 0) return "an operation must be named"
-  const parts = words(operation)
-  const writes = parts.filter((word) => WRITE_VERBS.includes(word))
-  if (writes.length > 0) return `"${operation}" contains the write verb ${writes.join(", ")}`
-  if (operation.includes(".")) {
-    const last = operation.split(".").pop() ?? ""
-    const head = words(last)[0] ?? ""
-    if (!READ_VERBS.some((read) => head.startsWith(read) || last.startsWith(read))) {
-      return `"${operation}" operates "${last}", which does not start with a read verb (${READ_VERBS.join(", ")}): a read never sends, changes or watches`
-    }
-    return undefined
-  }
-  if (!parts.some((word) => READ_VERBS.some((read) => word === read || word.startsWith(read)))) {
-    return `"${operation}" has no read verb (${READ_VERBS.join(", ")}): a read never sends, changes or watches`
-  }
-  return undefined
-}
-
-/** The multi-label public suffixes a person can register under but not be. */
-const PUBLIC_SUFFIXES = new Set([
-  "co.uk", "org.uk", "ac.uk", "gov.uk", "me.uk", "net.uk", "sch.uk", "ltd.uk", "plc.uk",
-  "com.au", "net.au", "org.au", "edu.au", "gov.au", "co.nz", "net.nz", "org.nz", "govt.nz",
-  "co.jp", "ne.jp", "or.jp", "go.jp", "co.kr", "or.kr", "co.in", "net.in", "org.in", "co.za",
-  "com.br", "net.br", "org.br", "com.mx", "com.ar", "com.co", "com.pe", "com.ve", "com.uy",
-  "com.tr", "com.cn", "com.tw", "com.hk", "com.sg", "com.my", "com.ph", "com.vn", "com.pk",
-  "com.ng", "com.sa", "com.eg", "com.ua", "com.pl", "com.es", "com.gr", "com.pt", "com.ro",
-  "co.id", "co.il", "co.ke", "co.th", "co.ae", "co.ma", "co.bw", "co.zw", "co.tz", "co.ug",
-])
-
 /** The hosts anyone can claim. */
 const SHARED_HOSTS = new Set([
   "cloudfront.net", "amazonaws.com", "storage.googleapis.com", "blob.core.windows.net", "web.core.windows.net",
   "herokuapp.com", "vercel.app", "netlify.app", "pages.dev", "workers.dev", "github.io", "githubusercontent.com",
   "gitlab.io", "bitbucket.io", "appspot.com", "firebaseapp.com", "web.app", "azurewebsites.net", "elasticbeanstalk.com",
   "onrender.com", "railway.app", "fly.dev", "deno.dev", "glitch.me", "repl.co", "surge.sh", "ngrok.io", "r2.dev",
-  "blogspot.com", "wordpress.com", "wixsite.com", "translate.goog", "ipfs.io", "dweb.link", "bit.ly", "tinyurl.com",
+  "blogspot.com", "blogspot.co.uk", "blogspot.de", "blogspot.in", "wordpress.com", "wixsite.com", "translate.goog",
+  "ipfs.io", "dweb.link", "bit.ly", "tinyurl.com",
 ])
 
 /** The measurement and advertising hosts a collected link never points at. */
@@ -130,11 +157,31 @@ const TRACKER_HOSTS = new Set([
   "adjust.com", "kochava.com", "smartadserver.com", "teads.tv", "yieldmo.com", "bat.bing.com",
 ])
 
-/** The second-level labels a ccTLD hands out as registry rules (`com.de`, `co.uk`): one plus a two-letter code is no site. */
-const EFFECTIVE_SLD = new Set([
-  "com", "co", "gov", "org", "net", "ac", "edu", "ne", "or", "go", "nic", "mil", "sch", "ltd", "plc",
-  "gen", "web", "biz", "info", "nom", "res", "idv", "gob", "gouv", "gv", "k12", "muni",
-])
+/** The Public Suffix List's rules, as the data file holds them. */
+const PSL = new Set(PUBLIC_SUFFIX_RULES)
+
+/**
+ * The public suffix of a host, from the full Public Suffix List (ICANN and PRIVATE): the longest matching rule, where
+ * `*.` matches one label and `!` is an exception. `a.b.co.uk` answers `co.uk`, and `shop.ondigitalocean.app` answers
+ * `ondigitalocean.app`, because the PRIVATE section says so.
+ */
+export function publicSuffixOf(host: string): string | null {
+  const labels = host.toLowerCase().split(".")
+  for (let index = 0; index < labels.length; index++) {
+    const candidate = labels.slice(index).join(".")
+    if (PSL.has(`!${candidate}`)) {
+      const exception = labels.slice(index + 1).join(".")
+      return exception === "" ? null : exception
+    }
+  }
+  for (let index = 0; index < labels.length; index++) {
+    const candidate = labels.slice(index).join(".")
+    if (PSL.has(candidate)) return candidate
+    const parent = labels.slice(index + 1).join(".")
+    if (parent !== "" && PSL.has(`*.${parent}`)) return candidate
+  }
+  return null
+}
 
 /**
  * Why a `urlHosts` pattern is too broad to mean anything, or null when it is fine.
@@ -148,19 +195,10 @@ export function urlHostProblem(host: unknown): string | null {
     return "is not a host pattern (a domain such as slack.com, or *.slack.com)"
   }
   const bare = host.toLowerCase().replace(/^\*\./, "")
-  const labels = bare.split(".")
-  if (labels.length < 2) return "names no registrable domain (a host needs at least two labels)"
-  if (labels.some((label) => label.startsWith("xn--"))) return "is a punycode host (a label starting xn--), which hides what it is"
-  let suffix: string | null = null
-  for (const size of [3, 2]) {
-    if (labels.length > size && PUBLIC_SUFFIXES.has(labels.slice(-size).join("."))) {
-      suffix = labels.slice(-size).join(".")
-      break
-    }
-  }
-  if (PUBLIC_SUFFIXES.has(bare)) return `is a public suffix (${bare}), which names no site`
-  if (labels.length === 2 && EFFECTIVE_SLD.has(labels[0] ?? "") && /^[a-z]{2}$/.test(labels[1] ?? "")) return `is an effective-TLD rule (${bare}), which names no site`
-  if (suffix !== null && bare === suffix) return `is a public suffix (${suffix}), which names no site`
+  if (bare.split(".").some((label) => label.startsWith("xn--"))) return "is a punycode host (a label starting xn--), which hides what it is"
+  const suffix = publicSuffixOf(bare)
+  if (suffix === null) return "names no public suffix (its top-level domain is not in the Public Suffix List)"
+  if (suffix === bare) return `is a public suffix (${bare}), which names no site`
   for (const listed of SHARED_HOSTS) if (bare === listed || bare.endsWith(`.${listed}`)) return `is a shared host (${listed}), which anyone can claim`
   for (const listed of TRACKER_HOSTS) if (bare === listed || bare.endsWith(`.${listed}`)) return `is a tracker (${listed}), which is no source's destination`
   return null
@@ -242,10 +280,23 @@ export function declarationProblems(sources: unknown, options: DeclarationOption
       for (const key of unique(scope.keys)) {
         if (scope.keys.filter((entry) => entry === key).length > 1) problems.push(`${at}.scope.keys names "${key}" twice`)
       }
-      if (scope.suggest !== undefined && tools !== undefined) {
-        const declared = toolOf(scope.suggest)
-        if (declared === undefined) problems.push(`${at}.scope.suggest names "${scope.suggest}", which the plugin does not declare`)
-        else if (declared.readOnly !== true) problems.push(`${at}.scope.suggest names "${scope.suggest}", which is not declared readOnly: true`)
+      const suggest = scope.suggest
+      if (suggest !== undefined) {
+        if (tools !== undefined) {
+          const declared = toolOf(suggest.tool)
+          if (declared === undefined) problems.push(`${at}.scope.suggest names "${suggest.tool}", which the plugin does not declare`)
+          else if (declared.readOnly !== true) problems.push(`${at}.scope.suggest names "${suggest.tool}", which is not declared readOnly: true`)
+        }
+        for (const operation of suggest.operations) {
+          const problem = operationProblem(operation)
+          if (problem !== undefined) problems.push(`${at}.scope.suggest.operations: ${problem}`)
+          if (item.permission.operations.includes(operation)) {
+            problems.push(`${at}.scope.suggest.operations lists "${operation}", which permission.operations also lists: a bind-time read must not enter the running grant`)
+          }
+        }
+        for (const operation of unique(suggest.operations)) {
+          if (suggest.operations.filter((entry) => entry === operation).length > 1) problems.push(`${at}.scope.suggest.operations lists "${operation}" twice`)
+        }
       }
     }
 
@@ -270,7 +321,7 @@ function itemTools(item: SourceItem): { readonly name: string; readonly where: s
   const found: { name: string; where: string }[] = [{ name: item.tool, where: "tool" }]
   const details: readonly Detail[] = item.kind === "events" ? (item.details ?? []) : []
   for (const [i, detail] of details.entries()) found.push({ name: detail.tool, where: `details[${i}].tool` })
-  if (item.scope?.suggest !== undefined) found.push({ name: item.scope.suggest, where: "scope.suggest" })
+  if (item.scope?.suggest !== undefined) found.push({ name: item.scope.suggest.tool, where: "scope.suggest.tool" })
   return found
 }
 
@@ -292,7 +343,11 @@ function isSourceItem(value: unknown): value is SourceItem {
   if (scope !== undefined) {
     if (!plain(scope) || !Array.isArray(scope["keys"]) || !scope["keys"].every((key) => typeof key === "string")) return false
     if (typeof scope["describe"] !== "string") return false
-    if (scope["suggest"] !== undefined && typeof scope["suggest"] !== "string") return false
+    const suggest = scope["suggest"]
+    if (suggest !== undefined) {
+      if (!plain(suggest) || typeof suggest["tool"] !== "string" || !Array.isArray(suggest["operations"])) return false
+      if (!suggest["operations"].every((operation) => typeof operation === "string")) return false
+    }
   }
   const hosts = value["urlHosts"]
   if (hosts !== undefined && (!Array.isArray(hosts) || !hosts.every((host) => typeof host === "string"))) return false

@@ -6,7 +6,6 @@
  * choose what the library reads next.
  */
 import type { Detail, Scope, SourceItem } from "../schema/types.ts"
-import { CORE_KINDS } from "./rules.ts"
 
 /** What the kit passes to a detail read: the confirmed scope, and the event fields the detail declares. */
 export interface DetailCallInput {
@@ -27,7 +26,7 @@ export function syntheticEvent(source: SourceItem): Record<string, unknown> {
   const kind = source.kind === "events" ? source.reads : "file"
   return {
     external_id: "conformance-1",
-    kind: CORE_KINDS.includes(kind) ? kind : "x-conformance/item",
+    kind,
     occurred_at: "2026-01-01T09:00:00.000Z",
     title: SENTINEL,
     text: SENTINEL,
@@ -76,6 +75,9 @@ export function detailInputProblems(detail: Detail, input: DetailCallInput): str
 export function scopeProblems(scope: Readonly<Record<string, readonly string[]>>, declared: Scope | undefined, where: string): string[] {
   const problems: string[] = []
   const keys = declared?.keys ?? []
+  if (keys.length > 0 && Object.keys(scope).length === 0) {
+    problems.push(`${where} was called with no confirmed scope, which is not what a person confirms`)
+  }
   for (const key of Object.keys(scope)) {
     if (!keys.includes(key)) problems.push(`${where} names the scope key "${key}", which the source does not declare`)
   }

@@ -647,11 +647,11 @@ function getSizableOrigin(input) {
 }
 var highSurrogate = /[\uD800-\uDBFF]/;
 function codePointLength(str) {
-  const units = str.length;
+  const units2 = str.length;
   if (!highSurrogate.test(str))
-    return units;
-  let count = units;
-  for (let i = 0; i < units - 1; i++) {
+    return units2;
+  let count = units2;
+  for (let i = 0; i < units2 - 1; i++) {
     if ((str.charCodeAt(i) & 64512) === 55296 && (str.charCodeAt(i + 1) & 64512) === 56320) {
       count--;
       i++;
@@ -1448,8 +1448,8 @@ var $ZodCheckMaxLength = /* @__PURE__ */ $constructor("$ZodCheckMaxLength", (ins
   (_a3 = inst._zod.def).when ?? (_a3.when = _whenHasLength);
   inst._zod.check = (payload) => {
     const input = payload.value;
-    const units = input.length;
-    const length = typeof input === "string" && units > def.maximum ? codePointLength(input) : units;
+    const units2 = input.length;
+    const length = typeof input === "string" && units2 > def.maximum ? codePointLength(input) : units2;
     if (length <= def.maximum)
       return;
     const origin = getLengthableOrigin(input);
@@ -1470,8 +1470,8 @@ var $ZodCheckMinLength = /* @__PURE__ */ $constructor("$ZodCheckMinLength", (ins
   (_a3 = inst._zod.def).when ?? (_a3.when = _whenHasLength);
   inst._zod.check = (payload) => {
     const input = payload.value;
-    const units = input.length;
-    const length = typeof input === "string" && units >= def.minimum && units < def.minimum * 2 ? codePointLength(input) : units;
+    const units2 = input.length;
+    const length = typeof input === "string" && units2 >= def.minimum && units2 < def.minimum * 2 ? codePointLength(input) : units2;
     if (length >= def.minimum)
       return;
     const origin = getLengthableOrigin(input);
@@ -1492,8 +1492,8 @@ var $ZodCheckLengthEquals = /* @__PURE__ */ $constructor("$ZodCheckLengthEquals"
   (_a3 = inst._zod.def).when ?? (_a3.when = _whenHasLength);
   inst._zod.check = (payload) => {
     const input = payload.value;
-    const units = input.length;
-    const length = typeof input === "string" && units >= def.length && units <= def.length * 2 ? codePointLength(input) : units;
+    const units2 = input.length;
+    const length = typeof input === "string" && units2 >= def.length && units2 <= def.length * 2 ? codePointLength(input) : units2;
     if (length === def.length)
       return;
     const origin = getLengthableOrigin(input);
@@ -6381,19 +6381,6 @@ function validator(name, schema) {
 // src/internal/schema/types.ts
 var MAX_BYTES_DEFAULT = 65536;
 var MAX_BYTES_LIMIT = 1048576;
-var OUTPUT_SCHEMAS = [
-  "agenda",
-  "inbox",
-  "metric",
-  "list",
-  "progress",
-  "note",
-  "links",
-  "countdown",
-  "image",
-  "table",
-  "record"
-];
 
 // src/internal/schema/sources.ts
 var SOURCE_ID = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/;
@@ -6402,33 +6389,32 @@ var READS = /^[a-z][a-z0-9-]{0,31}$/;
 var ACTION = /^(?:[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$/;
 var OPERATION = /^[A-Za-z][A-Za-z0-9._-]{0,199}$/;
 var SCOPE_KEY = /^[a-z][a-z0-9_]{0,31}$/;
+var OUTPUT_NAME = /^[a-z][a-z0-9-]{0,31}$/;
 var PRICE_PER = /^[a-z][a-z0-9-]{0,31}$/;
 var HOST = /^(?:\*\.)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
 var price = object({
   per: string2().max(32).regex(PRICE_PER, { error: "must be a lowercase word such as post, author or call" }),
-  usd: number2().min(0).max(100)
+  usd: number2().min(0)
 }).strict().describe("One price unit, in US dollars, from the plugin's own price table.");
-var cost = object({
-  class: _enum(["free", "metered", "billed"], { error: "must be free, metered or billed" }),
-  units: array(price).min(1).max(8).optional(),
-  probe: price.optional()
-}).strict().describe("What one read costs, including a probe call, which reads no content.").superRefine((value, ctx) => {
-  if (value.class === "billed") {
-    if (value.units === void 0) ctx.addIssue({ code: "custom", path: ["units"], message: "a billed source states its price units" });
-    if (value.probe === void 0) ctx.addIssue({ code: "custom", path: ["probe"], message: "a billed source states the price of a probe call" });
-  }
-  if (value.class === "metered" && value.units === void 0) {
-    ctx.addIssue({ code: "custom", path: ["units"], message: "a metered source states its price units" });
-  }
-  if (value.class === "free" && (value.units !== void 0 || value.probe !== void 0)) {
-    ctx.addIssue({ code: "custom", message: "a free source states no price units" });
-  }
-});
+var units = array(price).min(1).max(8);
+var freeCost = object({
+  class: literal("free"),
+  units: never({ error: "a free source states no price units" }).optional(),
+  probe: never({ error: "a free source states no probe cost" }).optional()
+}).strict();
+var meteredCost = object({ class: literal("metered"), units, probe: price.optional() }).strict();
+var billedCost = object({ class: literal("billed"), units, probe: price }).strict();
+var cost = discriminatedUnion("class", [freeCost, meteredCost, billedCost], { error: "must be free, metered or billed" }).describe("What one read costs, including a probe call, which reads no content.");
 var accounts = object({ named: boolean2().describe("True when the source reads more than one account, so a read names one.") }).strict().describe("Which signed-in accounts a source reads.");
 var scope = object({
   keys: array(string2().max(32).regex(SCOPE_KEY, { error: "must be a lowercase scope key such as channels" })).max(8).describe("The scope keys a person confirms: labels, channels, repositories. Empty when there is nothing to choose."),
   describe: string2().max(200).describe("The sentence shown at consent, such as Which labels."),
-  suggest: string2().max(64).regex(TOOL_NAME, { error: "must be a tool name" }).optional().describe("A read-only tool that lists the values a person may pick. It runs only at bind, in the probe session; its results are shown and never stored.")
+  suggest: object({
+    tool: string2().max(64).regex(TOOL_NAME, { error: "must be a tool name" }),
+    operations: array(string2().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" })).min(1).max(16)
+  }).strict().optional().describe(
+    "The read-only tool that lists the values a person may pick, and the operations it asserts. It runs only at bind, in the probe session; its results are shown and never stored, so its operations never enter a running grant."
+  )
 }).strict().describe("What a person confirms at consent, and the sentence that asks them.");
 var detail = object({
   id: string2().max(64).regex(SOURCE_ID, { error: "must be a dotted id such as gws.gmail.message" }),
@@ -6456,13 +6442,13 @@ var common = {
   id: string2().max(64).regex(SOURCE_ID, { error: "must be a dotted source id such as gws.gmail" }),
   tool: string2().max(64).regex(TOOL_NAME, { error: "must be a tool name" }),
   input: looseObject({}).optional().describe("The input the tool needs to reach this source. It carries no account and no secret."),
-  accounts,
+  accounts: accounts.optional(),
   scope: scope.optional(),
   private: boolean2().optional().describe("True when everything this source reads is personal: shown at consent."),
   cost,
   cadence: cadence.optional(),
-  maxBytes: int().min(1024).max(MAX_BYTES_LIMIT).optional().describe("The most bytes one result may take: default 65536 (64 KB), at most 1048576 (1 MB)."),
-  retentionDays: int().min(1).max(3650).optional().describe("How many days an events consumer keeps what it read."),
+  maxBytes: int().min(1).max(MAX_BYTES_LIMIT).default(MAX_BYTES_DEFAULT).describe("The most bytes one result may take: default 65536 (64 KB), at most 1048576 (1 MB)."),
+  retentionDays: int().min(1).optional().describe("How many days an events consumer keeps what it read."),
   urlHosts: urlHosts.optional()
 };
 var events = object({
@@ -6478,10 +6464,10 @@ var events = object({
 var snapshot = object({
   ...common,
   kind: literal("snapshot"),
-  output: _enum(OUTPUT_SCHEMAS).describe("The name of its schema in the output registry."),
+  output: string2().max(32).regex(OUTPUT_NAME, { error: "must be a lowercase name such as agenda" }).describe("The name of its schema in the output registry. The registry itself is the app's."),
   params: looseObject({}).optional().describe("The parameters a consumer may pass, resolved by the library at read time."),
   permission: permissionTool,
-  maxAgeSec: int().min(30).max(604800).optional().describe("How long a result may be reused before it is read again."),
+  maxAgeSec: int().min(1).optional().describe("How long a result may be reused before it is read again."),
   reads: never({ error: "a snapshot has no reads: it is state, not a feed" }).optional(),
   details: never({ error: "a snapshot has no details: it has no events to read one of" }).optional()
 }).strict().describe("A snapshot source: the latest state, read on demand.");
@@ -6497,6 +6483,5 @@ var SOURCES_SCHEMA = validator("sources", sourcesSchema);
 export {
   MAX_BYTES_DEFAULT,
   MAX_BYTES_LIMIT,
-  OUTPUT_SCHEMAS,
   SOURCES_SCHEMA
 };

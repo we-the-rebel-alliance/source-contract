@@ -4,12 +4,13 @@
  *
  * The shapes and the cross-field rules are both here, so the generated JSON Schema (`dist/schemas/sources.json`)
  * expresses them too: an events item is one branch of the union and carries `reads` and `permission.events` and no
- * `output`, and a snapshot is the other. What zod cannot put into JSON Schema at all (the read-verb and joiner lists,
- * the namespace of an action, the `urlHosts` suffix rules, unique ids and keys) is a conformance check, in
+ * `output`, a snapshot is the other, and `cost` is a union of free, metered and billed. What zod cannot put into JSON
+ * Schema at all (the tokenised verb rule, the namespace of an action, the public-suffix rule for `urlHosts`, unique ids
+ * and keys, a suggest operation that also sits in the running grant) is a conformance check, in
  * `internal/conformance/rules.ts`.
  */
 import * as z from "zod"
-import { MAX_BYTES_LIMIT, OUTPUT_SCHEMAS } from "./types.ts"
+import { MAX_BYTES_DEFAULT, MAX_BYTES_LIMIT } from "./types.ts"
 
 /** A source id: at least two dotted lowercase segments. */
 const SOURCE_ID = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/
@@ -23,6 +24,8 @@ const ACTION = /^(?:[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9
 const OPERATION = /^[A-Za-z][A-Za-z0-9._-]{0,199}$/
 /** A scope key: a lowercase word. */
 const SCOPE_KEY = /^[a-z][a-z0-9_]{0,31}$/
+/** A name in the output registry: a lowercase word. */
+const OUTPUT_NAME = /^[a-z][a-z0-9-]{0,31}$/
 /** A price unit's name: a lowercase word. */
 const PRICE_PER = /^[a-z][a-z0-9-]{0,31}$/
 /** An exact host, or `*.` and a registrable domain. */
@@ -31,31 +34,32 @@ const HOST = /^(?:\*\.)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-
 const price = z
   .object({
     per: z.string().max(32).regex(PRICE_PER, { error: "must be a lowercase word such as post, author or call" }),
-    usd: z.number().min(0).max(100),
+    usd: z.number().min(0),
   })
   .strict()
   .describe("One price unit, in US dollars, from the plugin's own price table.")
 
-const cost = z
+const units = z.array(price).min(1).max(8)
+
+const freeCost = z
   .object({
-    class: z.enum(["free", "metered", "billed"], { error: "must be free, metered or billed" }),
-    units: z.array(price).min(1).max(8).optional(),
-    probe: price.optional(),
+    class: z.literal("free"),
+    units: z.never({ error: "a free source states no price units" }).optional(),
+    probe: z.never({ error: "a free source states no probe cost" }).optional(),
   })
   .strict()
+
+const meteredCost = z
+  .object({ class: z.literal("metered"), units, probe: price.optional() })
+  .strict()
+
+const billedCost = z
+  .object({ class: z.literal("billed"), units, probe: price })
+  .strict()
+
+const cost = z
+  .discriminatedUnion("class", [freeCost, meteredCost, billedCost], { error: "must be free, metered or billed" })
   .describe("What one read costs, including a probe call, which reads no content.")
-  .superRefine((value, ctx) => {
-    if (value.class === "billed") {
-      if (value.units === undefined) ctx.addIssue({ code: "custom", path: ["units"], message: "a billed source states its price units" })
-      if (value.probe === undefined) ctx.addIssue({ code: "custom", path: ["probe"], message: "a billed source states the price of a probe call" })
-    }
-    if (value.class === "metered" && value.units === undefined) {
-      ctx.addIssue({ code: "custom", path: ["units"], message: "a metered source states its price units" })
-    }
-    if (value.class === "free" && (value.units !== undefined || value.probe !== undefined)) {
-      ctx.addIssue({ code: "custom", message: "a free source states no price units" })
-    }
-  })
 
 const accounts = z
   .object({ named: z.boolean().describe("True when the source reads more than one account, so a read names one.") })
@@ -70,11 +74,15 @@ const scope = z
       .describe("The scope keys a person confirms: labels, channels, repositories. Empty when there is nothing to choose."),
     describe: z.string().max(200).describe("The sentence shown at consent, such as Which labels."),
     suggest: z
-      .string()
-      .max(64)
-      .regex(TOOL_NAME, { error: "must be a tool name" })
+      .object({
+        tool: z.string().max(64).regex(TOOL_NAME, { error: "must be a tool name" }),
+        operations: z.array(z.string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" })).min(1).max(16),
+      })
+      .strict()
       .optional()
-      .describe("A read-only tool that lists the values a person may pick. It runs only at bind, in the probe session; its results are shown and never stored."),
+      .describe(
+        "The read-only tool that lists the values a person may pick, and the operations it asserts. It runs only at bind, in the probe session; its results are shown and never stored, so its operations never enter a running grant.",
+      ),
   })
   .strict()
   .describe("What a person confirms at consent, and the sentence that asks them.")
@@ -137,18 +145,18 @@ const common = {
   id: z.string().max(64).regex(SOURCE_ID, { error: "must be a dotted source id such as gws.gmail" }),
   tool: z.string().max(64).regex(TOOL_NAME, { error: "must be a tool name" }),
   input: z.looseObject({}).optional().describe("The input the tool needs to reach this source. It carries no account and no secret."),
-  accounts,
+  accounts: accounts.optional(),
   scope: scope.optional(),
   private: z.boolean().optional().describe("True when everything this source reads is personal: shown at consent."),
   cost,
   cadence: cadence.optional(),
   maxBytes: z
     .int()
-    .min(1024)
+    .min(1)
     .max(MAX_BYTES_LIMIT)
-    .optional()
+    .default(MAX_BYTES_DEFAULT)
     .describe("The most bytes one result may take: default 65536 (64 KB), at most 1048576 (1 MB)."),
-  retentionDays: z.int().min(1).max(3650).optional().describe("How many days an events consumer keeps what it read."),
+  retentionDays: z.int().min(1).optional().describe("How many days an events consumer keeps what it read."),
   urlHosts: urlHosts.optional(),
 }
 
@@ -170,10 +178,14 @@ const snapshot = z
   .object({
     ...common,
     kind: z.literal("snapshot"),
-    output: z.enum(OUTPUT_SCHEMAS).describe("The name of its schema in the output registry."),
+    output: z
+      .string()
+      .max(32)
+      .regex(OUTPUT_NAME, { error: "must be a lowercase name such as agenda" })
+      .describe("The name of its schema in the output registry. The registry itself is the app's."),
     params: z.looseObject({}).optional().describe("The parameters a consumer may pass, resolved by the library at read time."),
     permission: permissionTool,
-    maxAgeSec: z.int().min(30).max(604800).optional().describe("How long a result may be reused before it is read again."),
+    maxAgeSec: z.int().min(1).optional().describe("How long a result may be reused before it is read again."),
     reads: z.never({ error: "a snapshot has no reads: it is state, not a feed" }).optional(),
     details: z.never({ error: "a snapshot has no details: it has no events to read one of" }).optional(),
   })

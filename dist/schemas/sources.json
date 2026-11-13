@@ -64,10 +64,30 @@
                     "description": "The sentence shown at consent, such as Which labels."
                   },
                   "suggest": {
-                    "description": "A read-only tool that lists the values a person may pick. It runs only at bind, in the probe session; its results are shown and never stored.",
-                    "type": "string",
-                    "maxLength": 64,
-                    "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                    "description": "The read-only tool that lists the values a person may pick, and the operations it asserts. It runs only at bind, in the probe session; its results are shown and never stored, so its operations never enter a running grant.",
+                    "type": "object",
+                    "properties": {
+                      "tool": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                      },
+                      "operations": {
+                        "minItems": 1,
+                        "maxItems": 16,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
+                        }
+                      }
+                    },
+                    "required": [
+                      "tool",
+                      "operations"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -82,68 +102,146 @@
                 "type": "boolean"
               },
               "cost": {
-                "type": "object",
-                "properties": {
-                  "class": {
-                    "type": "string",
-                    "enum": [
-                      "free",
-                      "metered",
-                      "billed"
-                    ]
-                  },
-                  "units": {
-                    "minItems": 1,
-                    "maxItems": 8,
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "per": {
-                          "type": "string",
-                          "maxLength": 32,
-                          "pattern": "^[a-z][a-z0-9-]{0,31}$"
-                        },
-                        "usd": {
-                          "type": "number",
-                          "minimum": 0,
-                          "maximum": 100
-                        }
-                      },
-                      "required": [
-                        "per",
-                        "usd"
-                      ],
-                      "additionalProperties": false,
-                      "description": "One price unit, in US dollars, from the plugin's own price table."
-                    }
-                  },
-                  "probe": {
+                "oneOf": [
+                  {
                     "type": "object",
                     "properties": {
-                      "per": {
+                      "class": {
                         "type": "string",
-                        "maxLength": 32,
-                        "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                        "const": "free"
                       },
-                      "usd": {
-                        "type": "number",
-                        "minimum": 0,
-                        "maximum": 100
+                      "units": {
+                        "not": {}
+                      },
+                      "probe": {
+                        "not": {}
                       }
                     },
                     "required": [
-                      "per",
-                      "usd"
+                      "class"
                     ],
-                    "additionalProperties": false,
-                    "description": "One price unit, in US dollars, from the plugin's own price table."
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "class": {
+                        "type": "string",
+                        "const": "metered"
+                      },
+                      "units": {
+                        "minItems": 1,
+                        "maxItems": 8,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "per": {
+                              "type": "string",
+                              "maxLength": 32,
+                              "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                            },
+                            "usd": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "per",
+                            "usd"
+                          ],
+                          "additionalProperties": false,
+                          "description": "One price unit, in US dollars, from the plugin's own price table."
+                        }
+                      },
+                      "probe": {
+                        "type": "object",
+                        "properties": {
+                          "per": {
+                            "type": "string",
+                            "maxLength": 32,
+                            "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                          },
+                          "usd": {
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "per",
+                          "usd"
+                        ],
+                        "additionalProperties": false,
+                        "description": "One price unit, in US dollars, from the plugin's own price table."
+                      }
+                    },
+                    "required": [
+                      "class",
+                      "units"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "class": {
+                        "type": "string",
+                        "const": "billed"
+                      },
+                      "units": {
+                        "minItems": 1,
+                        "maxItems": 8,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "per": {
+                              "type": "string",
+                              "maxLength": 32,
+                              "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                            },
+                            "usd": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "per",
+                            "usd"
+                          ],
+                          "additionalProperties": false,
+                          "description": "One price unit, in US dollars, from the plugin's own price table."
+                        }
+                      },
+                      "probe": {
+                        "type": "object",
+                        "properties": {
+                          "per": {
+                            "type": "string",
+                            "maxLength": 32,
+                            "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                          },
+                          "usd": {
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "per",
+                          "usd"
+                        ],
+                        "additionalProperties": false,
+                        "description": "One price unit, in US dollars, from the plugin's own price table."
+                      }
+                    },
+                    "required": [
+                      "class",
+                      "units",
+                      "probe"
+                    ],
+                    "additionalProperties": false
                   }
-                },
-                "required": [
-                  "class"
                 ],
-                "additionalProperties": false,
                 "description": "What one read costs, including a probe call, which reads no content."
               },
               "cadence": {
@@ -159,16 +257,17 @@
                 "description": "A provider's own floor between reads. Only where the provider imposes one."
               },
               "maxBytes": {
+                "default": 65536,
                 "description": "The most bytes one result may take: default 65536 (64 KB), at most 1048576 (1 MB).",
                 "type": "integer",
-                "minimum": 1024,
+                "minimum": 1,
                 "maximum": 1048576
               },
               "retentionDays": {
                 "description": "How many days an events consumer keeps what it read.",
                 "type": "integer",
                 "minimum": 1,
-                "maximum": 3650
+                "maximum": 9007199254740991
               },
               "urlHosts": {
                 "maxItems": 8,
@@ -278,8 +377,8 @@
             "required": [
               "id",
               "tool",
-              "accounts",
               "cost",
+              "maxBytes",
               "kind",
               "reads",
               "permission"
@@ -339,10 +438,30 @@
                     "description": "The sentence shown at consent, such as Which labels."
                   },
                   "suggest": {
-                    "description": "A read-only tool that lists the values a person may pick. It runs only at bind, in the probe session; its results are shown and never stored.",
-                    "type": "string",
-                    "maxLength": 64,
-                    "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                    "description": "The read-only tool that lists the values a person may pick, and the operations it asserts. It runs only at bind, in the probe session; its results are shown and never stored, so its operations never enter a running grant.",
+                    "type": "object",
+                    "properties": {
+                      "tool": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                      },
+                      "operations": {
+                        "minItems": 1,
+                        "maxItems": 16,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,199}$"
+                        }
+                      }
+                    },
+                    "required": [
+                      "tool",
+                      "operations"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -357,68 +476,146 @@
                 "type": "boolean"
               },
               "cost": {
-                "type": "object",
-                "properties": {
-                  "class": {
-                    "type": "string",
-                    "enum": [
-                      "free",
-                      "metered",
-                      "billed"
-                    ]
-                  },
-                  "units": {
-                    "minItems": 1,
-                    "maxItems": 8,
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "per": {
-                          "type": "string",
-                          "maxLength": 32,
-                          "pattern": "^[a-z][a-z0-9-]{0,31}$"
-                        },
-                        "usd": {
-                          "type": "number",
-                          "minimum": 0,
-                          "maximum": 100
-                        }
-                      },
-                      "required": [
-                        "per",
-                        "usd"
-                      ],
-                      "additionalProperties": false,
-                      "description": "One price unit, in US dollars, from the plugin's own price table."
-                    }
-                  },
-                  "probe": {
+                "oneOf": [
+                  {
                     "type": "object",
                     "properties": {
-                      "per": {
+                      "class": {
                         "type": "string",
-                        "maxLength": 32,
-                        "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                        "const": "free"
                       },
-                      "usd": {
-                        "type": "number",
-                        "minimum": 0,
-                        "maximum": 100
+                      "units": {
+                        "not": {}
+                      },
+                      "probe": {
+                        "not": {}
                       }
                     },
                     "required": [
-                      "per",
-                      "usd"
+                      "class"
                     ],
-                    "additionalProperties": false,
-                    "description": "One price unit, in US dollars, from the plugin's own price table."
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "class": {
+                        "type": "string",
+                        "const": "metered"
+                      },
+                      "units": {
+                        "minItems": 1,
+                        "maxItems": 8,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "per": {
+                              "type": "string",
+                              "maxLength": 32,
+                              "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                            },
+                            "usd": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "per",
+                            "usd"
+                          ],
+                          "additionalProperties": false,
+                          "description": "One price unit, in US dollars, from the plugin's own price table."
+                        }
+                      },
+                      "probe": {
+                        "type": "object",
+                        "properties": {
+                          "per": {
+                            "type": "string",
+                            "maxLength": 32,
+                            "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                          },
+                          "usd": {
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "per",
+                          "usd"
+                        ],
+                        "additionalProperties": false,
+                        "description": "One price unit, in US dollars, from the plugin's own price table."
+                      }
+                    },
+                    "required": [
+                      "class",
+                      "units"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "class": {
+                        "type": "string",
+                        "const": "billed"
+                      },
+                      "units": {
+                        "minItems": 1,
+                        "maxItems": 8,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "per": {
+                              "type": "string",
+                              "maxLength": 32,
+                              "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                            },
+                            "usd": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "per",
+                            "usd"
+                          ],
+                          "additionalProperties": false,
+                          "description": "One price unit, in US dollars, from the plugin's own price table."
+                        }
+                      },
+                      "probe": {
+                        "type": "object",
+                        "properties": {
+                          "per": {
+                            "type": "string",
+                            "maxLength": 32,
+                            "pattern": "^[a-z][a-z0-9-]{0,31}$"
+                          },
+                          "usd": {
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "per",
+                          "usd"
+                        ],
+                        "additionalProperties": false,
+                        "description": "One price unit, in US dollars, from the plugin's own price table."
+                      }
+                    },
+                    "required": [
+                      "class",
+                      "units",
+                      "probe"
+                    ],
+                    "additionalProperties": false
                   }
-                },
-                "required": [
-                  "class"
                 ],
-                "additionalProperties": false,
                 "description": "What one read costs, including a probe call, which reads no content."
               },
               "cadence": {
@@ -434,16 +631,17 @@
                 "description": "A provider's own floor between reads. Only where the provider imposes one."
               },
               "maxBytes": {
+                "default": 65536,
                 "description": "The most bytes one result may take: default 65536 (64 KB), at most 1048576 (1 MB).",
                 "type": "integer",
-                "minimum": 1024,
+                "minimum": 1,
                 "maximum": 1048576
               },
               "retentionDays": {
                 "description": "How many days an events consumer keeps what it read.",
                 "type": "integer",
                 "minimum": 1,
-                "maximum": 3650
+                "maximum": 9007199254740991
               },
               "urlHosts": {
                 "maxItems": 8,
@@ -461,20 +659,9 @@
               },
               "output": {
                 "type": "string",
-                "enum": [
-                  "agenda",
-                  "inbox",
-                  "metric",
-                  "list",
-                  "progress",
-                  "note",
-                  "links",
-                  "countdown",
-                  "image",
-                  "table",
-                  "record"
-                ],
-                "description": "The name of its schema in the output registry."
+                "maxLength": 32,
+                "pattern": "^[a-z][a-z0-9-]{0,31}$",
+                "description": "The name of its schema in the output registry. The registry itself is the app's."
               },
               "params": {
                 "description": "The parameters a consumer may pass, resolved by the library at read time.",
@@ -515,8 +702,8 @@
               "maxAgeSec": {
                 "description": "How long a result may be reused before it is read again.",
                 "type": "integer",
-                "minimum": 30,
-                "maximum": 604800
+                "minimum": 1,
+                "maximum": 9007199254740991
               },
               "reads": {
                 "not": {}
@@ -528,8 +715,8 @@
             "required": [
               "id",
               "tool",
-              "accounts",
               "cost",
+              "maxBytes",
               "kind",
               "output",
               "permission"

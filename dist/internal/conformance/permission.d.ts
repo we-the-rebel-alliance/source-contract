@@ -35,14 +35,22 @@ export interface RecordingPermission {
     readonly undeclared: readonly string[];
 }
 /**
- * The grants a source's declaration derives, which are the session's exact rules.
+ * The grants a source's declaration derives, which are the running session's exact rules.
  *
- * §2.2 keeps `permission.operations` and the tool's action, not the grants themselves, because a grant is derived,
- * never hand-written. A dotted operation is the account's own resource on the plugin's read action
- * (`gws.read` on `{account}:gmail.users.messages.get`); a bare operation is an MCP tool's own action
+ * **Provisional.** The app's `permission` module owns this derivation; until it lands, the kit derives the grants itself
+ * so a plugin can pass conformance, and a caller may pass its own with `grants`. §2.2 keeps `permission.operations` and
+ * the tool's action, not the grants themselves: a dotted operation is the account's own resource on the plugin's read
+ * action (`gws.read` on `{account}:gmail.users.messages.get`), and a bare operation is an MCP tool's own action
  * (`slack_slack_read_channel` on `*`). Both forms are what the gws and Slack pilots assert.
+ *
+ * Not exported from the package: it is the kit's own reading, not a contract.
  */
 export declare function grantsFor(source: SourceItem): Grant[];
+/**
+ * The grants of the **bind** session: only `scope.suggest`'s tool and operations. They never enter a running grant, so
+ * they are a separate session with its own unused check.
+ */
+export declare function bindGrantsFor(source: SourceItem): Grant[];
 /** `{account}` is a wildcard for the account a call names; everything else must match exactly, or by `*`. */
 export declare function sameResource(declared: string, asserted: string): boolean;
 /** True when some assertion is the grant's action on one of its resources, with `{account}` bound to any account. */

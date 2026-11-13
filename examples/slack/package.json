@@ -20,7 +20,12 @@
             "channels"
           ],
           "describe": "Channels and direct messages to read.",
-          "suggest": "slack_list_user_channels"
+          "suggest": {
+            "tool": "slack_list_user_channels",
+            "operations": [
+              "slack_list_user_channels"
+            ]
+          }
         },
         "details": [
           {
@@ -36,8 +41,7 @@
           "operations": [
             "slack_read_user_profile",
             "slack_read_channel",
-            "slack_read_thread",
-            "slack_list_user_channels"
+            "slack_read_thread"
           ]
         },
         "private": true,

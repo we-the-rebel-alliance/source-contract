@@ -15,14 +15,13 @@ import type { Validator } from "./internal/checked.ts"
 import { sourcesSchema } from "./internal/schema/sources.ts"
 import type { Sources } from "./internal/schema/types.ts"
 
-export { MAX_BYTES_DEFAULT, MAX_BYTES_LIMIT, OUTPUT_SCHEMAS } from "./internal/schema/types.ts"
+export { MAX_BYTES_DEFAULT, MAX_BYTES_LIMIT } from "./internal/schema/types.ts"
 export type {
   Accounts,
   Cadence,
   Cost,
   Detail,
   DetailField,
-  OutputSchema,
   Permission,
   PermissionEvents,
   PermissionTool,
@@ -33,6 +32,7 @@ export type {
   SourceItem,
   SourceSnapshot,
   Sources,
+  Suggest,
 } from "./internal/schema/types.ts"
 
 /** The validator for a plugin's `sources` declaration, contract version 1. */

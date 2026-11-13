@@ -28,8 +28,12 @@ export interface Fixture {
 export interface RecordedSource {
   readonly cases?: readonly RecordedCase[] | undefined
   readonly probe?: RecordedCall | undefined
-  readonly details?: readonly (RecordedCall & { readonly id: string; readonly scope?: unknown; readonly event?: unknown })[] | undefined
+  readonly details?:
+    | readonly (RecordedCall & { readonly id: string; readonly scope?: unknown; readonly event?: unknown; readonly expect?: unknown; readonly refuses?: string | undefined })[]
+    | undefined
   readonly suggest?: RecordedCall | undefined
+  readonly snapshot?: (RecordedCall & { readonly input?: Readonly<Record<string, unknown>> | undefined }) | undefined
+  readonly identity?: readonly string[] | undefined
 }
 
 /** One recorded call: its input, the assertions it made, and its answer or its refusal. */
@@ -127,6 +131,8 @@ export async function runExamples({ root, schema, conformance }: ExampleModules)
         source,
         tools,
         ...(fixture.account === undefined ? {} : { account: fixture.account }),
+        ...(recorded.identity === undefined ? {} : { identityOperations: recorded.identity }),
+        ...(recorded.snapshot === undefined ? {} : { snapshotCases: [recorded.snapshot.input ?? {}] }),
         cases: (recorded.cases ?? []).map((entry) => ({
           name: entry.name ?? "a recorded case",
           input: entry.input,
@@ -136,6 +142,7 @@ export async function runExamples({ root, schema, conformance }: ExampleModules)
           id: detail.id,
           ...(detail.scope === undefined ? {} : { scope: detail.scope as Readonly<Record<string, readonly string[]>> }),
           ...(detail.event === undefined ? {} : { event: detail.event as Readonly<Record<string, unknown>> }),
+          ...(detail.expect === undefined ? {} : { expect: detail.expect as { readonly refuses: string } }),
         })),
         calls: replay(source.id, recorded),
       })
@@ -177,16 +184,33 @@ function replay(sourceId: string, recorded: RecordedSource): SourceConformanceOp
       return entry.answer
     }
   }
-  if ((recorded.details ?? []).length > 0) {
+  const details = recorded.details ?? []
+  if (details.length > 0) {
     calls["details"] = Object.fromEntries(
-      (recorded.details ?? []).map((detail) => [
-        detail.id,
-        async (_input: unknown, context: never) => {
-          await assertAll(context, detail.asserts)
-          return detail.answer
+      [...new Set(details.map((detail) => detail.id))].map((id) => [
+        id,
+        async (input: { readonly fields: Readonly<Record<string, unknown>> }, context: never) => {
+          const entry = details.find(
+            (detail) =>
+              detail.id === id &&
+              Object.entries((detail.event ?? {}) as Record<string, unknown>).every(([field, value]) => sameJson(input.fields[field], value)),
+          )
+          if (entry === undefined) {
+            throw new Error(`FIXTURE_MISSING: the fixture of ${sourceId} records no detail answer for ${JSON.stringify(input.fields)}. Next step: record that call in fixtures/conformance.json.`)
+          }
+          await assertAll(context, entry.asserts)
+          if (entry.refuses !== undefined) throw new Error(entry.refuses)
+          return entry.answer
         },
       ]),
     )
+  }
+  if (recorded.snapshot !== undefined) {
+    const snapshot = recorded.snapshot
+    calls["snapshot"] = async (_input: unknown, context: never) => {
+      await assertAll(context, snapshot.asserts)
+      return snapshot.answer
+    }
   }
   if (recorded.suggest !== undefined) {
     const suggest = recorded.suggest

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
-import { MAX_BYTES_DEFAULT, MAX_BYTES_LIMIT, OUTPUT_SCHEMAS, SOURCES_SCHEMA } from "../src/schema.ts"
+import { MAX_BYTES_DEFAULT, MAX_BYTES_LIMIT, SOURCES_SCHEMA } from "../src/schema.ts"
 
 /** An override of `undefined` deletes the key, so "must have" cases are real absences. */
 const strip = (value: Record<string, unknown>): Record<string, unknown> =>
@@ -91,9 +91,8 @@ describe("the sources schema", () => {
 
   test("a snapshot output names a schema in the registry", () => {
     assert.ok(problemsOf(declaration(snapshotItem({ output: undefined }))).some((problem) => /output/.test(problem)))
-    assert.ok(problemsOf(declaration(snapshotItem({ output: "spreadsheet" }))).some((problem) => /output|one of/.test(problem)))
+    assert.ok(problemsOf(declaration(snapshotItem({ output: "Spreadsheet" }))).some((problem) => /output|lowercase name/.test(problem)))
     assert.deepEqual(problemsOf(declaration(snapshotItem({ output: "table" }))), [])
-    assert.ok(OUTPUT_SCHEMAS.includes("agenda"))
   })
 
   test("permission operations are required, and the action matches the kind", () => {
@@ -116,13 +115,14 @@ describe("the sources schema", () => {
     assert.ok(problemsOf(declaration(eventItem({ cost: { class: "billed", units: [{ per: "post", usd: 0.005 }] } }))).some((problem) => /probe/.test(problem)))
     assert.ok(problemsOf(declaration(eventItem({ cost: { class: "free", units: [{ per: "post", usd: 0.005 }] } }))).some((problem) => /free/.test(problem)))
     assert.deepEqual(problemsOf(declaration(eventItem({ cost: { class: "billed", units: [{ per: "post", usd: 0.005 }], probe: { per: "call", usd: 0.01 } } }))), [])
+    assert.ok(problemsOf(declaration(eventItem({ cost: { class: "metered", probe: { per: "call", usd: 0.01 } } }))).some((problem) => /units/.test(problem)))
   })
 
   test("maxBytes defaults to 64 KB and never exceeds 1 MB", () => {
     assert.equal(MAX_BYTES_DEFAULT, 65536)
     assert.equal(MAX_BYTES_LIMIT, 1048576)
     assert.ok(problemsOf(declaration(eventItem({ maxBytes: MAX_BYTES_LIMIT + 1 }))).length > 0)
-    assert.ok(problemsOf(declaration(eventItem({ maxBytes: 512 }))).length > 0)
+    assert.deepEqual(problemsOf(declaration(eventItem({ maxBytes: 1 }))), [])
     assert.deepEqual(problemsOf(declaration(eventItem({ maxBytes: MAX_BYTES_LIMIT }))), [])
   })
 
@@ -143,8 +143,9 @@ describe("the sources schema", () => {
     assert.ok(withScope({ keys: ["Channels"], describe: "Which" }).length > 0)
     assert.ok(withScope({ keys: ["channels"] }).some((problem) => /describe/.test(problem)))
     assert.ok(withScope({ keys: ["channels"], describe: "Which", extra: true }).length > 0)
-    assert.deepEqual(withScope({ keys: ["channels"], describe: "Which", suggest: "slack_list_user_channels" }), [])
-    assert.ok(withScope({ keys: ["channels"], describe: "Which", suggest: "List Channels" }).length > 0)
+    assert.deepEqual(withScope({ keys: ["channels"], describe: "Which", suggest: { tool: "slack_list_user_channels", operations: ["slack_list_user_channels"] } }), [])
+    assert.ok(withScope({ keys: ["channels"], describe: "Which", suggest: "slack_list_user_channels" }).length > 0)
+    assert.ok(withScope({ keys: ["channels"], describe: "Which", suggest: { tool: "List Channels", operations: ["slack_list_user_channels"] } }).length > 0)
   })
 
   test("urlHosts is a list of host patterns", () => {
@@ -155,7 +156,7 @@ describe("the sources schema", () => {
   })
 
   test("accounts, cadence, retention and params keep their shapes", () => {
-    assert.ok(problemsOf(declaration(eventItem({ accounts: undefined }))).some((problem) => /accounts/.test(problem)))
+    assert.deepEqual(problemsOf(declaration(eventItem({ accounts: undefined }))), [])
     assert.ok(problemsOf(declaration(eventItem({ accounts: { named: "yes" } }))).length > 0)
     assert.deepEqual(problemsOf(declaration(eventItem({ cadence: { providerMinMinutes: 15 }, retentionDays: 30 }))), [])
     assert.ok(problemsOf(declaration(eventItem({ cadence: { providerMinMinutes: 0 } }))).length > 0)

@@ -1,0 +1,10 @@
+[
+  "a write verb in a name",
+  "a compound name",
+  "an operation's verb is not a read verb",
+  "an action outside the source's namespace",
+  "a urlHosts pattern too broad to mean anything",
+  "a duplicate source id",
+  "a tool not declared read-only",
+  "a suggest operation also in the running grant"
+]

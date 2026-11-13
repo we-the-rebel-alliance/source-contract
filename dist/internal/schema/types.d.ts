@@ -5,10 +5,6 @@
 /** `maxBytes`: the default and the ceiling (§2.2). */
 export declare const MAX_BYTES_DEFAULT = 65536;
 export declare const MAX_BYTES_LIMIT = 1048576;
-/** The output registry a snapshot names (§2.4). */
-export declare const OUTPUT_SCHEMAS: readonly ["agenda", "inbox", "metric", "list", "progress", "note", "links", "countdown", "image", "table", "record"];
-/** One of the output registry's names. */
-export type OutputSchema = (typeof OUTPUT_SCHEMAS)[number];
 /** The value of a plugin's top-level `sources` key: the contract version and its sources. */
 export interface Sources {
     readonly contractVersion: 1;
@@ -24,7 +20,8 @@ export interface SourceCommon {
     readonly tool: string;
     /** The input the tool needs to reach this source, such as `{ source: "gmail" }`. */
     readonly input?: Readonly<Record<string, unknown>> | undefined;
-    readonly accounts: Accounts;
+    /** Which signed-in accounts a source reads. Optional: §2.2's X item names none. */
+    readonly accounts?: Accounts | undefined;
     /** What a person confirms at consent, and the sentence that asks them. */
     readonly scope?: Scope | undefined;
     readonly permission: Permission;
@@ -33,7 +30,7 @@ export interface SourceCommon {
     readonly cost: Cost;
     /** A provider's own floor between reads, only where it imposes one. */
     readonly cadence?: Cadence | undefined;
-    /** The most bytes one result may take: default 64 KB, at most 1 MB. */
+    /** The most bytes one result may take: default 65536, at most 1 MB. */
     readonly maxBytes?: number | undefined;
     /** How many days an events consumer keeps what it read. */
     readonly retentionDays?: number | undefined;
@@ -59,8 +56,8 @@ export interface SourceEvents extends SourceCommon {
 /** A snapshot source: the latest state, read on demand. */
 export interface SourceSnapshot extends SourceCommon {
     readonly kind: "snapshot";
-    /** The name of its schema in the output registry. */
-    readonly output: OutputSchema;
+    /** The name of its schema in the output registry. The registry is the app's; this is a name only. */
+    readonly output: string;
     /** The parameters a consumer may pass, resolved by the library at read time. */
     readonly params?: Readonly<Record<string, unknown>> | undefined;
     /** The action its read tool asserts. */
@@ -83,8 +80,18 @@ export interface Scope {
     readonly keys: readonly string[];
     /** The sentence shown at consent. */
     readonly describe: string;
-    /** A read-only tool that lists the values a person may pick; it runs only at bind and stores nothing. */
-    readonly suggest?: string | undefined;
+    /** The read-only tool that lists the values a person may pick, and the operations it asserts at bind. */
+    readonly suggest?: Suggest | undefined;
+}
+/**
+ * A bind-time read: the values a person may pick for a scope key. It runs only at bind, in the probe session, with its
+ * results shown and never stored, so its operations never enter a running grant (§2.2, accepted addition).
+ */
+export interface Suggest {
+    /** The read-only tool that lists the values. */
+    readonly tool: string;
+    /** The operations it asserts, and nothing else. None of them may appear in `permission.operations`. */
+    readonly operations: readonly string[];
 }
 /** One read of an event's detail. */
 export interface Detail {
@@ -113,14 +120,29 @@ export interface PermissionTool {
     /** Every provider operation the source's reads assert, and nothing else. */
     readonly operations: readonly string[];
 }
-/** What one read costs. */
-export interface Cost {
-    /** `free` charges nothing, `metered` charges per unit, `billed` charges per call. */
-    readonly class: "free" | "metered" | "billed";
-    /** The price units the provider charges, for a metered or billed source. */
-    readonly units?: readonly Price[] | undefined;
+/** What one read costs: `free` charges nothing, `metered` charges per unit, `billed` charges per call. */
+export type Cost = CostFree | CostMetered | CostBilled;
+/** A source that charges nothing. */
+export interface CostFree {
+    readonly class: "free";
+    readonly units?: undefined;
+    readonly probe?: undefined;
+}
+/** A source charged per unit, whose probe may be charged too. */
+export interface CostMetered {
+    readonly class: "metered";
+    /** The price units the provider charges. */
+    readonly units: readonly Price[];
     /** The price of a probe call, which reads no content. */
     readonly probe?: Price | undefined;
+}
+/** A source charged on every call, whose probe is charged too. */
+export interface CostBilled {
+    readonly class: "billed";
+    /** The price units the provider charges. */
+    readonly units: readonly Price[];
+    /** The price of a probe call, which reads no content. */
+    readonly probe: Price;
 }
 /** One price unit, from the plugin's own price table. */
 export interface Price {

@@ -39,7 +39,7 @@ const price = z
   .strict()
   .describe("One price unit, in US dollars, from the plugin's own price table.")
 
-const units = z.array(price).min(1).max(8)
+const units = z.array(price).min(1)
 
 const freeCost = z
   .object({
@@ -70,13 +70,12 @@ const scope = z
   .object({
     keys: z
       .array(z.string().max(32).regex(SCOPE_KEY, { error: "must be a lowercase scope key such as channels" }))
-      .max(8)
       .describe("The scope keys a person confirms: labels, channels, repositories. Empty when there is nothing to choose."),
     describe: z.string().max(200).describe("The sentence shown at consent, such as Which labels."),
     suggest: z
       .object({
         tool: z.string().max(64).regex(TOOL_NAME, { error: "must be a tool name" }),
-        operations: z.array(z.string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" })).min(1).max(16),
+        operations: z.array(z.string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" })).min(1),
       })
       .strict()
       .optional()
@@ -94,7 +93,6 @@ const detail = z
     from: z
       .array(z.enum(["external_id", "kind", "occurred_at", "url", "thread", "actors", "labels", "hash"]))
       .min(1)
-      .max(8)
       .describe("The event fields the detail's input comes from. Identifiers only: an event's title and text are never an input."),
   })
   .strict()
@@ -104,7 +102,6 @@ const permissionBase = {
   operations: z
     .array(z.string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" }))
     .min(1)
-    .max(32)
     .describe("Every operation the source's reads assert, and nothing else."),
 }
 
@@ -138,7 +135,6 @@ const urlHosts = z
       .max(253)
       .regex(HOST, { error: "must be a host such as slack.com, or *.slack.com" }),
   )
-  .max(8)
   .describe("The hosts an event's url may point at, for display. A consumer renders a url only when its host matches.")
 
 const common = {
@@ -166,7 +162,7 @@ const events = z
     ...common,
     kind: z.literal("events"),
     reads: z.string().max(32).regex(READS, { error: "must be a lowercase word such as message" }).describe("The thing it reads."),
-    details: z.array(detail).max(16).optional(),
+    details: z.array(detail).optional(),
     permission: permissionEvents,
     output: z.never({ error: "an events source has no output: output belongs to a snapshot" }).optional(),
     maxAgeSec: z.never({ error: "an events source has no maxAgeSec: a snapshot may be reused, an events page is read once" }).optional(),
@@ -199,6 +195,6 @@ const source = z.discriminatedUnion("kind", [events, snapshot])
 export const sourcesSchema = z
   .object({
     contractVersion: z.literal(1),
-    items: z.array(source).min(1).max(64).describe("The plugin's sources. A source id is unique across the declaration."),
+    items: z.array(source).min(1).describe("The plugin's sources. A source id is unique across the declaration."),
   })
   .strict()

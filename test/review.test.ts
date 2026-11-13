@@ -7,6 +7,7 @@ import {
   declarationProblems,
   nameProblem,
   operationProblem,
+  pageProblems,
   sourceConformance,
   urlHostProblem,
   type ConformanceCalls,
@@ -150,8 +151,8 @@ describe("names and verbs, tokenised", () => {
   })
 
   test("a write verb in the verb position is refused", () => {
-    for (const name of ["send_message", "delete_issue", "slash_send_message", "slack_send_message", "messages_send", "post_status"]) {
-      assert.match(String(nameProblem(name)), /write verb/, name)
+    for (const name of ["send_message", "delete_issue", "slack_send_message", "messages_send", "post_status"]) {
+      assert.match(String(nameProblem(name)), /write verb|not a read verb/, name)
     }
     for (const operation of ["gmail.users.messages.send", "gmail.users.messages.insert", "gmail.users.messages.batchModify", "calendar.events.quickAdd", "gmail.users.messages.emptyTrash", "gmail.users.messages.untrash", "calendar.events.watch", "slack_send_message"]) {
       assert.ok(operationProblem(operation) !== undefined, operation)
@@ -278,7 +279,7 @@ describe("probe may assert only the identity operations", () => {
     reads: "message",
     tool: "events_list",
     accounts: { named: true },
-    permission: { events: "gws.events_list", operations: ["gmail.users.getProfile", "gmail.users.messages.list"] },
+    permission: { events: "gws.events_list", operations: ["gmail.users.messages.list"] },
     cost: { class: "free" },
   })
   const page = (): Record<string, unknown> => ({
@@ -332,7 +333,7 @@ describe("details must refuse an event outside the confirmed scope", () => {
     accounts: { named: false },
     scope: { keys: ["channels"], describe: "Channels" },
     details: [{ id: "slack.workspace.thread", tool: "slack_read_thread", from: ["thread"] }],
-    permission: { events: "slack_events_list", operations: ["slack_read_channel", "slack_read_thread"] },
+    permission: { events: "slack_events_list", operations: ["slack_read_thread"] },
     cost: { class: "free" },
   })
   const page = (): Record<string, unknown> => ({
@@ -357,7 +358,7 @@ describe("details must refuse an event outside the confirmed scope", () => {
       cases: [{ name: "a page", input: {} }],
       detailCases: [
         { id: "slack.workspace.thread", scope: { channels: ["C0PILOT001"] }, event: { thread: "slack-thread:C0PILOT001:1" } },
-        { id: "slack.workspace.thread", scope: { channels: ["C0PILOT001"] }, event: { thread: "slack-thread:C0PILOT003:1" }, expect: { refuses: "SCOPE_UNKNOWN" } },
+        { id: "slack.workspace.thread", scope: { channels: ["C0PILOT001"] }, event: { thread: "slack-thread:C0PILOT003:1" }, expect: { refuses: "PERMISSION_DENIED" } },
       ],
       calls: {
         list: async (_input, context) => {
@@ -373,7 +374,7 @@ describe("details must refuse an event outside the confirmed scope", () => {
         details: {
           "slack.workspace.thread": async (input, context) => {
             if (input.fields["thread"] === "slack-thread:C0PILOT003:1") {
-              if (refuseOutside) throw new Error("SCOPE_UNKNOWN: that thread is in a channel nobody confirmed. Next step: confirm the channel.")
+              if (refuseOutside) throw new Error("PERMISSION_DENIED: that thread is in a channel nobody confirmed. Next step: confirm the channel it belongs to.")
               return page()
             }
             await context.permission.assert({ action: "slack_slack_read_thread" })
@@ -424,7 +425,7 @@ describe("the three mutations the reviewer killed", () => {
     reads: "message",
     tool: "events_list",
     accounts: { named: false },
-    permission: { events: "slack_events_list", operations: ["slack_read_channel", "slack_read_user_profile"] },
+    permission: { events: "slack_events_list", operations: ["slack_read_channel"] },
     cost: { class: "free" },
   })
   const page = (): Record<string, unknown> => ({
@@ -535,5 +536,232 @@ describe("the conformance-only rules", () => {
       assert.deepEqual(problemsOf(sources), [], `${entry.rule}: the schema must accept it`)
       assert.ok(declarationProblems(sources, { tools }).length > 0, `${entry.rule}: the kit must refuse it`)
     }
+  })
+})
+
+// The re-check's cases.
+
+describe("the running session's unused-grant check", () => {
+  const item = (): Record<string, unknown> => ({
+    id: "gws.gmail",
+    kind: "events",
+    reads: "message",
+    tool: "events_list",
+    accounts: { named: true },
+    permission: { events: "gws.events_list", operations: ["gmail.users.messages.list"] },
+    cost: { class: "free" },
+  })
+  const page = (): Record<string, unknown> => ({
+    source: "gws.gmail",
+    plugin: "@joe-broadhead/opencode-gws",
+    account: "sam.rivera@example.com",
+    cursor: "c1",
+    more: false,
+    events: [],
+    refused: [],
+    failed: [],
+  })
+
+  test("a content operation no page asserts is reported by the running session", async () => {
+    const report = await sourceConformance({
+      plugin: "@joe-broadhead/opencode-gws",
+      source: sourceOf(item()),
+      tools: [{ id: "events_list", readOnly: true }],
+      identityOperations: ["gmail.users.getProfile"],
+      cases: [{ name: "a page", input: {} }],
+      calls: {
+        // It asserts the identity operation, never the content one: switching off the running check lets this pass.
+        list: async (_input, context) => {
+          await context.permission.assert({ action: "gws.events_list" })
+          await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.getProfile"] })
+          return page()
+        },
+        probe: async (_input, context) => {
+          await context.permission.assert({ action: "gws.events_list" })
+          await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.getProfile"] })
+          return { account: "sam.rivera@example.com", owner: null }
+        },
+      },
+    })
+    assert.ok(
+      report.problems.some((problem) => /gws\.read on \{account\}:gmail\.users\.messages\.list.*no read asserts/.test(problem)),
+      report.problems.join("; "),
+    )
+    assert.equal(report.ok, false)
+  })
+})
+
+describe("identity operations", () => {
+  const item = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+    id: "gws.gmail",
+    kind: "events",
+    reads: "message",
+    tool: "events_list",
+    accounts: { named: true },
+    permission: { events: "gws.events_list", operations: ["gmail.users.messages.list"] },
+    cost: { class: "free" },
+    ...over,
+  })
+  const page = (): Record<string, unknown> => ({
+    source: "gws.gmail",
+    plugin: "@joe-broadhead/opencode-gws",
+    account: "sam.rivera@example.com",
+    cursor: "c1",
+    more: false,
+    events: [],
+    refused: [],
+    failed: [],
+  })
+  const run = (identityOperations: string[]) =>
+    sourceConformance({
+      plugin: "@joe-broadhead/opencode-gws",
+      source: sourceOf(item()),
+      tools: [{ id: "events_list", readOnly: true }],
+      identityOperations,
+      cases: [{ name: "a page", input: {} }],
+      calls: {
+        list: async (_input, context) => {
+          await context.permission.assert({ action: "gws.events_list" })
+          await context.permission.assert({ action: "gws.read", resources: ["sam.rivera@example.com:gmail.users.messages.list"] })
+          return page()
+        },
+        probe: async (_input, context) => {
+          await context.permission.assert({ action: "gws.events_list" })
+          for (const operation of identityOperations) {
+            const action = operation.includes(".") ? "gws.read" : "gws_" + operation
+            await context.permission.assert({ action, resources: [operation.includes(".") ? `sam.rivera@example.com:${operation}` : "*"] })
+          }
+          return { account: "sam.rivera@example.com", owner: null }
+        },
+      },
+    })
+
+  test("an identity operation that is also a content operation is refused", async () => {
+    const report = await run(["gmail.users.messages.list"])
+    assert.ok(report.problems.some((problem) => /messages\.list is an identity operation.*not content/.test(problem)), report.problems.join("; "))
+  })
+
+  test("the report names the identity operations it ran with", async () => {
+    const report = await run(["gmail.users.getProfile"])
+    assert.deepEqual(report.identityOperations, ["gmail.users.getProfile"])
+  })
+})
+
+describe("the verb rule keeps Memory's promise", () => {
+  test("a tool name whose verb is a write verb, or that carries one, is refused", () => {
+    for (const name of ["read_delete", "messages.getDelete", "getAndSend", "send_message", "delete_issue", "slack_post_message", "calendar_delete"]) {
+      assert.ok(nameProblem(name) !== undefined, name)
+    }
+  })
+
+  test("a noun after the first token is allowed, and a read verb anywhere makes it a read", () => {
+    for (const name of ["get_issue", "list_comments", "get_post", "read", "events_list", "calendar_today", "slack_read_channel", "list_deleted_items"]) {
+      assert.equal(nameProblem(name), undefined, name)
+    }
+  })
+
+  test("an operation keeps its last segment free of a write verb, and may lead with a noun", () => {
+    for (const operation of ["x.users.mentions", "drive.files.export", "calendar.events.instances", "gmail.users.messages.batchGet", "gmail.users.messages.get", "slack_read_channel"]) {
+      assert.equal(operationProblem(operation), undefined, operation)
+    }
+    for (const operation of ["gmail.users.messages.insert", "gmail.users.messages.batchModify", "calendar.events.quickAdd", "gmail.users.messages.emptyTrash", "gmail.users.messages.untrash", "calendar.events.watch", "gmail.users.messages.send", "messages.getDelete"]) {
+      assert.ok(operationProblem(operation) !== undefined, operation)
+    }
+  })
+})
+
+describe("an out-of-scope detail read refuses with a defined code", () => {
+  const item = (): Record<string, unknown> => ({
+    id: "slack.workspace",
+    kind: "events",
+    reads: "message",
+    tool: "events_list",
+    accounts: { named: false },
+    scope: { keys: ["channels"], describe: "Channels" },
+    details: [{ id: "slack.workspace.thread", tool: "slack_read_thread", from: ["thread"] }],
+    permission: { events: "slack_events_list", operations: ["slack_read_thread"] },
+    cost: { class: "free" },
+  })
+  const page = (): Record<string, unknown> => ({
+    source: "slack.workspace",
+    plugin: PLUGIN,
+    account: ACCOUNT,
+    cursor: "c1",
+    more: false,
+    events: [],
+    refused: [],
+    failed: [],
+  })
+  const run = (code: string) =>
+    sourceConformance({
+      plugin: PLUGIN,
+      source: sourceOf(item()),
+      tools: [{ id: "events_list", readOnly: true }, { id: "slack_read_thread", readOnly: true }],
+      identityOperations: ["slack_read_channel"],
+      cases: [{ name: "a page", input: {} }],
+      detailCases: [
+        { id: "slack.workspace.thread", scope: { channels: ["C0PILOT001"] }, event: { thread: "slack-thread:C0PILOT001:1" } },
+        { id: "slack.workspace.thread", scope: { channels: ["C0PILOT001"] }, event: { thread: "slack-thread:C0PILOT003:1" }, expect: { refuses: code } },
+      ],
+      calls: {
+        list: async (_input, context) => {
+          await context.permission.assert({ action: "slack_events_list" })
+          await context.permission.assert({ action: "slack_slack_read_channel" })
+          return page()
+        },
+        probe: async (_input, context) => {
+          await context.permission.assert({ action: "slack_events_list" })
+          await context.permission.assert({ action: "slack_slack_read_channel" })
+          return { account: ACCOUNT, owner: null }
+        },
+        details: {
+          "slack.workspace.thread": async (input, context) => {
+            if (input.fields["thread"] === "slack-thread:C0PILOT003:1") {
+              throw new Error(`${code}: that thread is in a channel nobody confirmed. Next step: confirm the channel it belongs to.`)
+            }
+            await context.permission.assert({ action: "slack_slack_read_thread" })
+            return page()
+          },
+        },
+      },
+    })
+
+  test("PERMISSION_DENIED is the code, and any other code is refused", async () => {
+    const good = await run("PERMISSION_DENIED")
+    assert.deepEqual(good.problems, [], good.problems.join("; "))
+    for (const code of ["SCOPE_UNKNOWN", "CURSOR_INVALID", "NOPE"]) {
+      const bad = await run(code)
+      assert.ok(bad.problems.some((problem) => /PERMISSION_DENIED/.test(problem)), `${code}: ${bad.problems.join("; ")}`)
+    }
+  })
+})
+
+describe("the page fields that are absent, and the limits §2.2 does not state", () => {
+  const item = (): Record<string, unknown> => ({
+    id: "slack.workspace",
+    kind: "events",
+    reads: "message",
+    tool: "events_list",
+    accounts: { named: false },
+    permission: { events: "slack_events_list", operations: ["slack_read_channel"] },
+    cost: { class: "free" },
+  })
+  const options = () => ({ source: sourceOf(item()), plugin: PLUGIN, input: {} })
+
+  test("a page without refused[] or failed[] is accepted", () => {
+    assert.deepEqual(pageProblems({ source: "slack.workspace", plugin: PLUGIN, cursor: "c1", more: false, events: [] }, options()), [])
+  })
+
+  test("a cursor longer than 1024 characters is accepted", () => {
+    assert.deepEqual(pageProblems({ source: "slack.workspace", plugin: PLUGIN, cursor: "c".repeat(5000), more: true, events: [] }, options()), [])
+  })
+
+  test("scope keys and price units have no ceiling §2.2 does not state", () => {
+    const keys = Array.from({ length: 12 }, (_, index) => `key${index}`)
+    const checked = SOURCES_SCHEMA.check(declarationOf({ ...item(), scope: { keys, describe: "Which" } }))
+    assert.equal(checked.ok, true, checked.ok ? "" : checked.problems.join("; "))
+    const units = Array.from({ length: 12 }, (_, index) => ({ per: `unit${index}`, usd: 1 }))
+    const priced = SOURCES_SCHEMA.check(declarationOf({ ...item(), cost: { class: "metered", units } }))
+    assert.equal(priced.ok, true, priced.ok ? "" : priced.problems.join("; "))
   })
 })

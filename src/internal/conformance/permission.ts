@@ -70,6 +70,17 @@ export function bindGrantsFor(source: SourceItem): Grant[] {
   return grants
 }
 
+/**
+ * The grants of the identity operations a probe may assert. They are part of the running session, because a source's
+ * page reads its identity too, but they are not content: a declaration may not also list one in
+ * `permission.operations`.
+ */
+export function identityGrantsFor(source: SourceItem, identityOperations: readonly string[]): Grant[] {
+  const grants: Grant[] = []
+  for (const operation of identityOperations) addGrant(grants, source, operation)
+  return grants
+}
+
 /** One operation's grant, as the same derivation makes it. */
 function addGrant(grants: Grant[], source: SourceItem, operation: string): void {
   const head = source.id.split(".")[0] ?? source.id

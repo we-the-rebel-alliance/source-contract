@@ -6396,7 +6396,7 @@ var price = object({
   per: string2().max(32).regex(PRICE_PER, { error: "must be a lowercase word such as post, author or call" }),
   usd: number2().min(0)
 }).strict().describe("One price unit, in US dollars, from the plugin's own price table.");
-var units = array(price).min(1).max(8);
+var units = array(price).min(1);
 var freeCost = object({
   class: literal("free"),
   units: never({ error: "a free source states no price units" }).optional(),
@@ -6407,11 +6407,11 @@ var billedCost = object({ class: literal("billed"), units, probe: price }).stric
 var cost = discriminatedUnion("class", [freeCost, meteredCost, billedCost], { error: "must be free, metered or billed" }).describe("What one read costs, including a probe call, which reads no content.");
 var accounts = object({ named: boolean2().describe("True when the source reads more than one account, so a read names one.") }).strict().describe("Which signed-in accounts a source reads.");
 var scope = object({
-  keys: array(string2().max(32).regex(SCOPE_KEY, { error: "must be a lowercase scope key such as channels" })).max(8).describe("The scope keys a person confirms: labels, channels, repositories. Empty when there is nothing to choose."),
+  keys: array(string2().max(32).regex(SCOPE_KEY, { error: "must be a lowercase scope key such as channels" })).describe("The scope keys a person confirms: labels, channels, repositories. Empty when there is nothing to choose."),
   describe: string2().max(200).describe("The sentence shown at consent, such as Which labels."),
   suggest: object({
     tool: string2().max(64).regex(TOOL_NAME, { error: "must be a tool name" }),
-    operations: array(string2().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" })).min(1).max(16)
+    operations: array(string2().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" })).min(1)
   }).strict().optional().describe(
     "The read-only tool that lists the values a person may pick, and the operations it asserts. It runs only at bind, in the probe session; its results are shown and never stored, so its operations never enter a running grant."
   )
@@ -6419,10 +6419,10 @@ var scope = object({
 var detail = object({
   id: string2().max(64).regex(SOURCE_ID, { error: "must be a dotted id such as gws.gmail.message" }),
   tool: string2().max(64).regex(TOOL_NAME, { error: "must be a tool name" }),
-  from: array(_enum(["external_id", "kind", "occurred_at", "url", "thread", "actors", "labels", "hash"])).min(1).max(8).describe("The event fields the detail's input comes from. Identifiers only: an event's title and text are never an input.")
+  from: array(_enum(["external_id", "kind", "occurred_at", "url", "thread", "actors", "labels", "hash"])).min(1).describe("The event fields the detail's input comes from. Identifiers only: an event's title and text are never an input.")
 }).strict().describe("One read of an event's detail: the tool, and the event fields its input comes from.");
 var permissionBase = {
-  operations: array(string2().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" })).min(1).max(32).describe("Every operation the source's reads assert, and nothing else.")
+  operations: array(string2().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" })).min(1).describe("Every operation the source's reads assert, and nothing else.")
 };
 var permissionEvents = object({
   events: string2().max(80).regex(ACTION, { error: "must be a dotted action such as gws.events_list, or a namespaced tool action such as slack_events_list" }),
@@ -6437,7 +6437,7 @@ var permissionTool = object({
 var cadence = object({ providerMinMinutes: int().min(1).max(10080).optional() }).strict().describe("A provider's own floor between reads. Only where the provider imposes one.");
 var urlHosts = array(
   string2().max(253).regex(HOST, { error: "must be a host such as slack.com, or *.slack.com" })
-).max(8).describe("The hosts an event's url may point at, for display. A consumer renders a url only when its host matches.");
+).describe("The hosts an event's url may point at, for display. A consumer renders a url only when its host matches.");
 var common = {
   id: string2().max(64).regex(SOURCE_ID, { error: "must be a dotted source id such as gws.gmail" }),
   tool: string2().max(64).regex(TOOL_NAME, { error: "must be a tool name" }),
@@ -6455,7 +6455,7 @@ var events = object({
   ...common,
   kind: literal("events"),
   reads: string2().max(32).regex(READS, { error: "must be a lowercase word such as message" }).describe("The thing it reads."),
-  details: array(detail).max(16).optional(),
+  details: array(detail).optional(),
   permission: permissionEvents,
   output: never({ error: "an events source has no output: output belongs to a snapshot" }).optional(),
   maxAgeSec: never({ error: "an events source has no maxAgeSec: a snapshot may be reused, an events page is read once" }).optional(),
@@ -6474,7 +6474,7 @@ var snapshot = object({
 var source = discriminatedUnion("kind", [events, snapshot]);
 var sourcesSchema = object({
   contractVersion: literal(1),
-  items: array(source).min(1).max(64).describe("The plugin's sources. A source id is unique across the declaration.")
+  items: array(source).min(1).describe("The plugin's sources. A source id is unique across the declaration.")
 }).strict();
 
 // src/schema.ts

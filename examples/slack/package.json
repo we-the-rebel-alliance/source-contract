@@ -39,7 +39,6 @@
         "permission": {
           "events": "slack_events_list",
           "operations": [
-            "slack_read_user_profile",
             "slack_read_channel",
             "slack_read_thread"
           ]

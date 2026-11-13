@@ -35,7 +35,7 @@ const slackItem = (over: Record<string, unknown> = {}): Record<string, unknown> 
   details: [{ id: "slack.workspace.thread", tool: "slack_read_thread", from: ["thread"] }],
   permission: {
     events: "slack_events_list",
-    operations: ["slack_read_user_profile", "slack_read_channel", "slack_read_thread"],
+    operations: ["slack_read_channel", "slack_read_thread"],
   },
   cost: { class: "free" },
   private: true,
@@ -258,7 +258,7 @@ describe("sourceConformance", () => {
     },
     details: {
       "slack.workspace.thread": async (input, context) => {
-        if (input.fields["thread"] === "slack-thread:C0PILOT003:1") throw new Error("SCOPE_UNKNOWN: that thread is in a channel nobody confirmed. Next step: confirm the channel.")
+        if (input.fields["thread"] === "slack-thread:C0PILOT003:1") throw new Error("PERMISSION_DENIED: that thread is in a channel nobody confirmed. Next step: confirm the channel it belongs to.")
         await context.permission.assert({ action: "slack_slack_read_thread" })
         return page({ events: [{ external_id: "C0PILOT001:9" }], cursor: "" })
       },
@@ -272,7 +272,7 @@ describe("sourceConformance", () => {
 
   const detailCases = [
     { id: "slack.workspace.thread", scope: { channels: ["C0PILOT001"] }, event: { thread: "slack-thread:C0PILOT001:1" } },
-    { id: "slack.workspace.thread", scope: { channels: ["C0PILOT001"] }, event: { thread: "slack-thread:C0PILOT003:1" }, expect: { refuses: "SCOPE_UNKNOWN" } },
+    { id: "slack.workspace.thread", scope: { channels: ["C0PILOT001"] }, event: { thread: "slack-thread:C0PILOT003:1" }, expect: { refuses: "PERMISSION_DENIED" } },
   ]
 
   const run = (calls: ConformanceCalls, over: Record<string, unknown> = {}) =>
@@ -295,7 +295,7 @@ describe("sourceConformance", () => {
     assert.equal(report.incomplete, false)
     assert.deepEqual(
       report.checks.map((check) => check.name),
-      ["declaration", "page-result", "failed-holds-cursor", "gap-and-cursor-expired", "refused-is-final", "billed-cost", "probe", "details", "suggest", "unused-grants"],
+      ["declaration", "page-result", "failed-holds-cursor", "gap-and-cursor-expired", "refused-is-final", "billed-cost", "identity-grants", "probe", "details", "suggest", "unused-grants"],
     )
     assert.deepEqual(
       report.checks.filter((check) => !check.ran).map((check) => check.name),
@@ -336,7 +336,7 @@ describe("sourceConformance", () => {
       full({
         details: {
           "slack.workspace.thread": async (input, context) => {
-            if (input.fields["thread"] === "slack-thread:C0PILOT003:1") throw new Error("SCOPE_UNKNOWN: that thread is in a channel nobody confirmed. Next step: confirm the channel.")
+            if (input.fields["thread"] === "slack-thread:C0PILOT003:1") throw new Error("PERMISSION_DENIED: that thread is in a channel nobody confirmed. Next step: confirm the channel it belongs to.")
             seen.push(input)
             await context.permission.assert({ action: "slack_slack_read_thread" })
             return page({ events: [{ external_id: "C0PILOT001:9" }], cursor: "" })

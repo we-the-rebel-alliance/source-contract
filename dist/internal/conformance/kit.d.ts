@@ -94,6 +94,8 @@ export interface ConformanceCheck {
 export interface ConformanceReport {
     readonly source: string;
     readonly plugin: string;
+    /** The identity operations the kit was told a probe may assert, so a reader sees them. */
+    readonly identityOperations: readonly string[];
     readonly checks: readonly ConformanceCheck[];
     readonly problems: readonly string[];
     readonly ok: boolean;

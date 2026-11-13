@@ -51,6 +51,12 @@ export declare function grantsFor(source: SourceItem): Grant[];
  * they are a separate session with its own unused check.
  */
 export declare function bindGrantsFor(source: SourceItem): Grant[];
+/**
+ * The grants of the identity operations a probe may assert. They are part of the running session, because a source's
+ * page reads its identity too, but they are not content: a declaration may not also list one in
+ * `permission.operations`.
+ */
+export declare function identityGrantsFor(source: SourceItem, identityOperations: readonly string[]): Grant[];
 /** `{account}` is a wildcard for the account a call names; everything else must match exactly, or by `*`. */
 export declare function sameResource(declared: string, asserted: string): boolean;
 /** True when some assertion is the grant's action on one of its resources, with `{account}` bound to any account. */

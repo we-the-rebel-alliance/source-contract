@@ -10,15 +10,17 @@ export interface DeclarationOptions {
     readonly tools?: readonly ToolDeclaration[] | undefined;
 }
 /**
- * The verbs a read may be named with, as tokens of a name: `get`, `list`, `read`, `search`, `query`, `fetch`, `count`,
- * `describe`, `probe`, `export`, `instances`, `status`, `lookup`, `view`, `history`, `find`.
- *
- * `export` and `instances` are reads here because a provider's own operation says so (`drive.files.export`,
- * `calendar.events.instances`). A plugin whose write tool is named `export` is still a write: the declaration says
- * `readOnly: true` for a read, and that is what conformance checks.
+ * The read verbs a name may lead with: `get`, `list`, `read`, `search`, `query`, `fetch`, `count`, `describe`,
+ * `probe`, `status`, `lookup`, `view`, `history`, `find`.
  */
 export declare const READ_VERBS: readonly string[];
 export declare const WRITE_VERBS: readonly string[];
+/**
+ * The tokens that are a verb only in a verb's position, and a noun anywhere else: a `post` is a thing, and `get_post`
+ * reads one; `export` is a provider's read (`drive.files.export`) and a plugin's commit tool alike. A tool name may not
+ * lead with one, and may not put one straight after its namespace.
+ */
+export declare const NOUN_VERBS: readonly string[];
 /** Tokens that join two actions in one name (`get_and_save`, `getAndSend`): a name is one action. */
 export declare const JOINERS: readonly string[];
 /**
@@ -29,10 +31,12 @@ export declare function tokensOf(name: unknown): string[];
 /**
  * Why a name is not a read's, or undefined when it is one.
  *
- * The name's own verb is the first token that is a verb: a read verb makes it a read, a write verb refuses it. The verb's
- * position is not fixed, because a name may put it after a namespace (`events_list`, `slack_read_channel`) or lead with
- * it (`get_issue`). A write word in an object position is no verb at all here (`get_issue` is a read of an issue). A name
- * with no verb is a noun name (`calendar_today`), which §2.2's own tools allow.
+ * 1. `and`/`then` followed by a verb makes a compound, and is refused.
+ * 2. An unambiguous write verb anywhere in the name is refused (Memory's promise).
+ * 3. The name's first token is where its verb sits. A read verb there makes it a read; a noun-verb there is a write
+ *    (`post_message`); a plain noun is a namespace or a noun name, and then the next token is the verb's position, so
+ *    `slack_post_message` is refused while `events_list` and `slack_read_channel` are reads and `calendar_today` names
+ *    no action at all.
  */
 export declare function nameProblem(name: unknown): string | undefined;
 /** `nameProblem`, and the name must carry a read verb. Memory's stricter form, for a read a consumer names. */
@@ -40,11 +44,11 @@ export declare function readVerbProblem(name: unknown): string | undefined;
 /**
  * Why an operation is not a read's, or undefined when it is one.
  *
- * A dotted operation (`gmail.users.messages.get`) is a provider call, and its last segment is where its verb sits: the
- * first token of that segment that is a verb must be a read verb, so `insert`, `batchModify`, `watch`, `untrash` and
- * `emptyTrash` are refused without being listed, while `batchGet`, `export` and `instances` are reads. A bare operation
- * (`slack_read_channel`) is an MCP tool name and follows the same rule. An operation with no verb at all is refused: an
- * operation names how it reads.
+ * A dotted operation (`gmail.users.messages.get`) is a provider call, and its last segment is where its verb sits: no
+ * unambiguous write verb may appear in that segment. A noun there is fine, because a provider names a collection
+ * (`x.users.mentions`, `calendar.events.instances`, `drive.files.export`); `insert`, `batchModify`, `watch`, `untrash`
+ * and `emptyTrash` are refused without being listed as exceptions. A bare operation (`slack_read_channel`) is an MCP
+ * tool name and follows the same rule.
  */
 export declare function operationProblem(operation: unknown): string | undefined;
 /** Every field of a contract-1 event. */

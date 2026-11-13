@@ -913,9 +913,9 @@
             "thread": "slack-thread:C0PILOT003:1761996000.000100"
           },
           "expect": {
-            "refuses": "SCOPE_UNKNOWN"
+            "refuses": "PERMISSION_DENIED"
           },
-          "refuses": "SCOPE_UNKNOWN: that thread is in a channel nobody confirmed. Next step: confirm the channel it belongs to."
+          "refuses": "PERMISSION_DENIED: that thread is in a channel nobody confirmed. Next step: confirm the channel it belongs to."
         }
       ],
       "suggest": {

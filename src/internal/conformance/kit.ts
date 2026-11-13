@@ -26,6 +26,7 @@ import {
   assertionMatches,
   bindGrantsFor,
   grantsFor,
+  identityGrantsFor,
   recordingPermission,
   unusedGrants,
   type Assertion,
@@ -114,12 +115,17 @@ export interface ConformanceCheck {
 export interface ConformanceReport {
   readonly source: string
   readonly plugin: string
+  /** The identity operations the kit was told a probe may assert, so a reader sees them. */
+  readonly identityOperations: readonly string[]
   readonly checks: readonly ConformanceCheck[]
   readonly problems: readonly string[]
   readonly ok: boolean
   /** True when a check applies and did not run: the report says nothing about it, so it is not ok. */
   readonly incomplete: boolean
 }
+
+/** The code §2.3's table gives a read that reaches past what the person confirmed. */
+const OUT_OF_SCOPE_CODE = "PERMISSION_DENIED"
 
 /** Where a source restarts when it reports an expired cursor without a hint of its own. */
 const RECOVERY_SINCE = "2026-01-01T00:00:00.000Z"
@@ -131,6 +137,7 @@ const CHECKS = [
   "gap-and-cursor-expired",
   "refused-is-final",
   "billed-cost",
+  "identity-grants",
   "probe",
   "details",
   "suggest",
@@ -147,7 +154,9 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   const { plugin, source, tools, calls } = options
   const cases = options.cases ?? []
   const account = options.account ?? "conformance"
-  const running = recordingPermission(options.grants ?? grantsFor(source))
+  const identityOperations = options.identityOperations ?? []
+  const runningGrants = [...(options.grants ?? grantsFor(source)), ...identityGrantsFor(source, identityOperations)]
+  const running = recordingPermission(runningGrants)
   const bind = recordingPermission(bindGrantsFor(source))
   const context: SessionContext = { account, permission: running.permission }
   const bindContext: SessionContext = { account, permission: bind.permission }
@@ -217,6 +226,14 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   add("refused-is-final", refused, isEvents && sawRefused, !isEvents)
   add("billed-cost", cost, source.cost.class === "billed" && isEvents, source.cost.class !== "billed")
 
+  const identity: string[] = []
+  for (const operation of identityOperations) {
+    if (source.permission.operations.includes(operation)) {
+      identity.push(`${operation} is an identity operation and permission.operations also lists it: an identity read is not content, and the declaration must not call it both`)
+    }
+  }
+  add("identity-grants", identity)
+
   const probe: string[] = []
   const assertedBeforeProbe = running.assertions.length
   try {
@@ -243,7 +260,7 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
     const own = detailCases.filter((entry) => entry.id === detail.id)
     const inside = own.filter((entry) => entry.expect === undefined)
     const outside = own.filter((entry) => entry.expect !== undefined)
-    for (const entry of own) await assertDetail(entry, detail, source, read, context, running, plugin, details)
+    for (const entry of own) await assertDetail(entry, detail, source, read, context, running, runningGrants, identityOperations, plugin, details)
     if (inside.length === 0) details.push(`details(${detail.id}) has no case inside the confirmed scope`)
     if (scopeKeys.length > 0 && outside.length === 0) {
       details.push(`details(${detail.id}) has no case outside the confirmed scope: a read pinned to a scope must refuse one that is not`)
@@ -292,7 +309,7 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
     }
   }
 
-  const unused = unusedGrants(options.grants ?? grantsFor(source), running.assertions).map(
+  const unused = unusedGrants(runningGrants, running.assertions).map(
     (grant) => `the declaration grants ${grant.action} on ${grant.resource}, which no read asserts: a source's grants are exactly what it asserts`,
   )
   const unusedRan = isEvents ? cases.length > 0 : snapshot.length === 0
@@ -309,7 +326,7 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
 
   const problems = checks.flatMap((check) => check.problems)
   const incomplete = checks.some((check) => !check.ran && !check.notApplicable)
-  return { source: source.id, plugin, checks, problems, ok: problems.length === 0 && !incomplete, incomplete }
+  return { source: source.id, plugin, identityOperations, checks, problems, ok: problems.length === 0 && !incomplete, incomplete }
 }
 
 /** `sourceConformance`, for a test or a check: throws one error naming every problem. */
@@ -336,6 +353,8 @@ async function assertDetail(
   read: (input: DetailCallInput, context: SessionContext) => Promise<unknown>,
   context: SessionContext,
   running: ReturnType<typeof recordingPermission>,
+  runningGrants: readonly Grant[],
+  identityOperations: readonly string[],
   plugin: string,
   problems: string[],
 ): Promise<void> {
@@ -348,12 +367,17 @@ async function assertDetail(
     ...(entry.event === undefined ? {} : { event: entry.event }),
   })
   if (entry.expect !== undefined) {
+    // §2.3's table has one code for a read the person's grant does not cover: PERMISSION_DENIED.
+    if (entry.expect.refuses !== OUT_OF_SCOPE_CODE) {
+      problems.push(`${where} expects ${entry.expect.refuses} for an out-of-scope read, and §2.3's table names ${OUT_OF_SCOPE_CODE}`)
+    }
     try {
       await read(input, context)
-      problems.push(`${where} answered a call outside the confirmed scope: it must be refused with ${entry.expect.refuses}`)
+      problems.push(`${where} answered a call outside the confirmed scope: it must be refused with ${OUT_OF_SCOPE_CODE}: … Next step: …`)
     } catch (error) {
-      if (!messageOf(error).includes(entry.expect.refuses)) {
-        problems.push(`${where} refused an out-of-scope call with "${messageOf(error)}", not the expected ${entry.expect.refuses}`)
+      const message = messageOf(error)
+      if (!message.startsWith(`${OUT_OF_SCOPE_CODE}: `) || !message.includes("Next step: ")) {
+        problems.push(`${where} refused an out-of-scope call with "${message}", not ${OUT_OF_SCOPE_CODE}: … Next step: …`)
       }
     }
     return
@@ -367,7 +391,16 @@ async function assertDetail(
   } catch (error) {
     problems.push(`${where} failed inside the confirmed scope: ${messageOf(error)}`)
   }
-  problems.push(...outsideGrants(running.assertions.slice(assertedBefore), grantsFor(source), where))
+  problems.push(...outsideGrants(running.assertions.slice(assertedBefore), runningGrants, where))
+  const identity = identityGrantsFor(source, identityOperations)
+  for (const assertion of running.assertions.slice(assertedBefore)) {
+    const resources = assertion.resources.length > 0 ? assertion.resources : ["*"]
+    for (const resource of resources) {
+      if (identity.some((grant) => assertionMatches([{ action: assertion.action, resources: [resource] }], grant))) {
+        problems.push(`${where} asserts an identity operation: an identity read is not a content read, and a detail read must not reach one`)
+      }
+    }
+  }
 }
 
 /** The word or code an error carries, for a refusal case. */

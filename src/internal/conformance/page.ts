@@ -56,7 +56,6 @@ export function pageChecks(answer: unknown, options: PageOptions): PageChecks {
   if (answer["source"] !== options.source.id) shape.push(`${where} names source ${JSON.stringify(answer["source"])}, not ${options.source.id}`)
   if (answer["plugin"] !== options.plugin) shape.push(`${where} names plugin ${JSON.stringify(answer["plugin"])}, not ${options.plugin}`)
   if (typeof answer["cursor"] !== "string") shape.push(`${where} cursor must be a string`)
-  else if (answer["cursor"].length > 1024) shape.push(`${where} cursor is longer than 1024 characters`)
   if (typeof answer["more"] !== "boolean") shape.push(`${where} more must be true or false`)
 
   const events = answer["events"]
@@ -96,12 +95,12 @@ export function pageProblems(answer: unknown, options: PageOptions): string[] {
   return [...checks.shape, ...checks.cursor, ...checks.gap, ...checks.refused, ...checks.cost]
 }
 
-/** `refused[]` or `failed[]`: each entry a final or retryable drop, with the id and the reason. */
+/**
+ * `refused[]` or `failed[]`: each entry a final or retryable drop, with the id and the reason. Absent is fine: a source
+ * that never drops anything may omit the list.
+ */
 function entries(value: unknown, where: string, problems: string[]): string[] {
-  if (value === undefined) {
-    problems.push(`${where} must be a list, empty when nothing was dropped`)
-    return []
-  }
+  if (value === undefined) return []
   if (!Array.isArray(value)) {
     problems.push(`${where} must be a list`)
     return []

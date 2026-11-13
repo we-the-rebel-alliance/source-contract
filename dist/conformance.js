@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
   SOURCES_SCHEMA
-} from "./chunks/chunk-B5IV7HTD.js";
+} from "./chunks/chunk-FU3LV3DM.js";
 import "./chunks/chunk-HLVAKAYG.js";
 
 // src/internal/conformance/public-suffix-list.ts
@@ -10427,12 +10427,19 @@ zabc.net`;
 var PUBLIC_SUFFIX_RULES = RULES.split("\n");
 
 // src/internal/conformance/rules.ts
-var READ_VERBS = ["get", "list", "read", "search", "query", "fetch", "count", "describe", "probe", "export", "instances", "status", "lookup", "view", "history", "find"];
-var WRITE_VERB_WORDS = `send create update delete write post remove add set schedule upload download archive unarchive move merge close reopen approve reject share invite react draft complete run exec execute edit patch put push commit comment reply message broadcast follow block mute pin unpin star assign label lock trash forward dispatch clear flush reset truncate overwrite apply join leave ban toggle kick unban grant revoke transfer promote demote rename duplicate restore purge wipe drop attach detach notify escalate resolve decline cancel submit vote snooze dismiss acknowledge ack enable disable connect disconnect login logout signin signout mint issue verify hide unhide publish unpublish ingest index reindex sync import save like unlike generate mark bookmark print convert insert modify watch untrash empty mention subscribe unsubscribe subscribe pause resume retry rollback`;
-var WRITE_VERBS = WRITE_VERB_WORDS.split(" ");
+var READ_VERBS = ["get", "list", "read", "search", "query", "fetch", "count", "describe", "probe", "status", "lookup", "view", "history", "find"];
+var WRITE_VERB_WORDS = `delete remove send create update write insert patch put set add modify move trash archive revoke
+  grant share invite approve merge close reply forward upload publish unarchive unshare unsubscribe subscribe
+  watch untrash empty ban kick mute block follow pin unpin star unstar assign lock unlock overwrite truncate purge wipe
+  drop attach detach notify escalate resolve decline cancel submit vote snooze dismiss acknowledge ack enable disable
+  connect disconnect login logout signin signout mint verify hide unhide unpublish ingest index reindex sync import save
+  like unlike generate copy print convert schedule download`;
+var WRITE_VERBS = WRITE_VERB_WORDS.split(/\s+/).filter((word) => word !== "");
+var NOUN_VERBS = ["issue", "post", "comment", "draft", "label", "message", "export", "mention", "note", "file", "bookmark"];
 var JOINERS = ["and", "then", "or"];
 var READ = new Set(READ_VERBS);
 var WRITE = new Set(WRITE_VERBS);
+var NOUN = new Set(NOUN_VERBS);
 var JOIN = new Set(JOINERS);
 var isVerb = (token) => READ.has(token) || WRITE.has(token);
 function tokensOf(name) {
@@ -10442,12 +10449,8 @@ function joinerProblem(name, tokens) {
   for (let index = 1; index < tokens.length - 1; index++) {
     const token = tokens[index] ?? "";
     const next = tokens[index + 1] ?? "";
-    if (JOIN.has(token) && isVerb(next)) return `"${name}" joins two actions with "${token}": name the one action it is`;
+    if (JOIN.has(token) && (isVerb(next) || NOUN.has(next))) return `"${name}" joins two actions with "${token}": name the one action it is`;
   }
-  return void 0;
-}
-function firstVerb(tokens) {
-  for (const [index, token] of tokens.entries()) if (isVerb(token)) return { verb: token, index };
   return void 0;
 }
 function nameProblem(name) {
@@ -10455,15 +10458,18 @@ function nameProblem(name) {
   const tokens = tokensOf(name);
   const joiner = joinerProblem(name, tokens);
   if (joiner !== void 0) return joiner;
-  const verb = firstVerb(tokens);
-  if (verb !== void 0 && WRITE.has(verb.verb)) return `"${name}" carries the write verb ${verb.verb} where the name should carry the read's own verb`;
+  const write = tokens.find((token) => WRITE.has(token));
+  if (write !== void 0) return `"${name}" carries the write verb ${write}: a read never sends, changes or watches`;
+  const [first = "", second = ""] = tokens;
+  if (READ.has(first)) return void 0;
+  if (NOUN.has(first)) return `"${name}" leads with "${first}", which is a verb here and not a read verb`;
+  if (NOUN.has(second)) return `"${name}" puts "${second}" where the verb sits, and it is not a read verb`;
   return void 0;
 }
 function readVerbProblem(name) {
   const problem = nameProblem(name);
   if (problem !== void 0) return problem;
-  const verb = firstVerb(tokensOf(name));
-  if (verb === void 0) return `"${String(name)}" carries no read verb (${READ_VERBS.join(", ")})`;
+  if (!tokensOf(name).some((token) => READ.has(token))) return `"${String(name)}" carries no read verb (${READ_VERBS.join(", ")})`;
   return void 0;
 }
 function operationProblem(operation) {
@@ -10471,9 +10477,8 @@ function operationProblem(operation) {
   const joiner = joinerProblem(operation, tokensOf(operation));
   if (joiner !== void 0) return joiner;
   const segment = operation.includes(".") ? operation.split(".").pop() ?? "" : operation;
-  const verb = firstVerb(tokensOf(segment));
-  if (verb === void 0) return `"${operation}" carries no read verb in "${segment}" (${READ_VERBS.join(", ")}): a read never sends, changes or watches`;
-  if (WRITE.has(verb.verb)) return `"${operation}" carries the write verb ${verb.verb} in "${segment}": a read never sends, changes or watches`;
+  const write = tokensOf(segment).find((token) => WRITE.has(token));
+  if (write !== void 0) return `"${operation}" carries the write verb ${write} in "${segment}": a read never sends, changes or watches`;
   return void 0;
 }
 var EVENT_FIELDS = ["external_id", "kind", "occurred_at", "title", "text", "url", "thread", "actors", "labels", "hash"];
@@ -10651,11 +10656,6 @@ function declarationProblems(sources, options = {}) {
       }
       const suggest = scope.suggest;
       if (suggest !== void 0) {
-        if (tools !== void 0) {
-          const declared = toolOf(suggest.tool);
-          if (declared === void 0) problems.push(`${at}.scope.suggest names "${suggest.tool}", which the plugin does not declare`);
-          else if (declared.readOnly !== true) problems.push(`${at}.scope.suggest names "${suggest.tool}", which is not declared readOnly: true`);
-        }
         for (const operation of suggest.operations) {
           const problem = operationProblem(operation);
           if (problem !== void 0) problems.push(`${at}.scope.suggest.operations: ${problem}`);
@@ -10737,6 +10737,11 @@ function bindGrantsFor(source) {
   for (const operation of suggest.operations) addGrant(grants, source, operation);
   return grants;
 }
+function identityGrantsFor(source, identityOperations) {
+  const grants = [];
+  for (const operation of identityOperations) addGrant(grants, source, operation);
+  return grants;
+}
 function addGrant(grants, source, operation) {
   const head = source.id.split(".")[0] ?? source.id;
   const grant = operation.includes(".") ? { action: `${head}.read`, resource: `{account}:${operation}` } : { action: `${head}_${operation}`, resource: "*" };
@@ -10801,7 +10806,6 @@ function pageChecks(answer, options) {
   if (answer["source"] !== options.source.id) shape.push(`${where} names source ${JSON.stringify(answer["source"])}, not ${options.source.id}`);
   if (answer["plugin"] !== options.plugin) shape.push(`${where} names plugin ${JSON.stringify(answer["plugin"])}, not ${options.plugin}`);
   if (typeof answer["cursor"] !== "string") shape.push(`${where} cursor must be a string`);
-  else if (answer["cursor"].length > 1024) shape.push(`${where} cursor is longer than 1024 characters`);
   if (typeof answer["more"] !== "boolean") shape.push(`${where} more must be true or false`);
   const events = answer["events"];
   if (!Array.isArray(events)) shape.push(`${where} events must be a list`);
@@ -10836,10 +10840,7 @@ function pageProblems(answer, options) {
   return [...checks.shape, ...checks.cursor, ...checks.gap, ...checks.refused, ...checks.cost];
 }
 function entries(value, where, problems) {
-  if (value === void 0) {
-    problems.push(`${where} must be a list, empty when nothing was dropped`);
-    return [];
-  }
+  if (value === void 0) return [];
   if (!Array.isArray(value)) {
     problems.push(`${where} must be a list`);
     return [];
@@ -10975,12 +10976,15 @@ function suggestProblems(answer, where) {
 }
 
 // src/internal/conformance/kit.ts
+var OUT_OF_SCOPE_CODE = "PERMISSION_DENIED";
 var RECOVERY_SINCE = "2026-01-01T00:00:00.000Z";
 async function sourceConformance(options) {
   const { plugin, source, tools, calls } = options;
   const cases = options.cases ?? [];
   const account = options.account ?? "conformance";
-  const running = recordingPermission(options.grants ?? grantsFor(source));
+  const identityOperations = options.identityOperations ?? [];
+  const runningGrants = [...options.grants ?? grantsFor(source), ...identityGrantsFor(source, identityOperations)];
+  const running = recordingPermission(runningGrants);
   const bind = recordingPermission(bindGrantsFor(source));
   const context = { account, permission: running.permission };
   const bindContext = { account, permission: bind.permission };
@@ -11045,6 +11049,13 @@ async function sourceConformance(options) {
   add("gap-and-cursor-expired", gap, isEvents && sawGap, !isEvents);
   add("refused-is-final", refused, isEvents && sawRefused, !isEvents);
   add("billed-cost", cost, source.cost.class === "billed" && isEvents, source.cost.class !== "billed");
+  const identity = [];
+  for (const operation of identityOperations) {
+    if (source.permission.operations.includes(operation)) {
+      identity.push(`${operation} is an identity operation and permission.operations also lists it: an identity read is not content, and the declaration must not call it both`);
+    }
+  }
+  add("identity-grants", identity);
   const probe = [];
   const assertedBeforeProbe = running.assertions.length;
   try {
@@ -11070,7 +11081,7 @@ async function sourceConformance(options) {
     const own = detailCases.filter((entry) => entry.id === detail.id);
     const inside = own.filter((entry) => entry.expect === void 0);
     const outside = own.filter((entry) => entry.expect !== void 0);
-    for (const entry of own) await assertDetail(entry, detail, source, read, context, running, plugin, details);
+    for (const entry of own) await assertDetail(entry, detail, source, read, context, running, runningGrants, identityOperations, plugin, details);
     if (inside.length === 0) details.push(`details(${detail.id}) has no case inside the confirmed scope`);
     if (scopeKeys.length > 0 && outside.length === 0) {
       details.push(`details(${detail.id}) has no case outside the confirmed scope: a read pinned to a scope must refuse one that is not`);
@@ -11116,7 +11127,7 @@ async function sourceConformance(options) {
       if (snapshotCases.length === 0) snapshot.push("the source is a snapshot and no snapshot case ran");
     }
   }
-  const unused = unusedGrants(options.grants ?? grantsFor(source), running.assertions).map(
+  const unused = unusedGrants(runningGrants, running.assertions).map(
     (grant) => `the declaration grants ${grant.action} on ${grant.resource}, which no read asserts: a source's grants are exactly what it asserts`
   );
   const unusedRan = isEvents ? cases.length > 0 : snapshot.length === 0;
@@ -11131,7 +11142,7 @@ async function sourceConformance(options) {
   }
   const problems = checks.flatMap((check) => check.problems);
   const incomplete = checks.some((check) => !check.ran && !check.notApplicable);
-  return { source: source.id, plugin, checks, problems, ok: problems.length === 0 && !incomplete, incomplete };
+  return { source: source.id, plugin, identityOperations, checks, problems, ok: problems.length === 0 && !incomplete, incomplete };
 }
 function assertConformance(report) {
   if (report.ok) return;
@@ -11144,7 +11155,7 @@ function assertConformance(report) {
   throw new Error(`CONFORMANCE_FAILED: the source ${report.source} of ${report.plugin} is not conformant: ${why}. Next step: fix each problem listed.
 - ${report.problems.join("\n- ")}`);
 }
-async function assertDetail(entry, detail, source, read, context, running, plugin, problems) {
+async function assertDetail(entry, detail, source, read, context, running, runningGrants, identityOperations, plugin, problems) {
   const where = `details(${detail.id})`;
   const scope = entry.scope ?? {};
   problems.push(...scopeProblems(scope, source.scope, where));
@@ -11154,12 +11165,16 @@ async function assertDetail(entry, detail, source, read, context, running, plugi
     ...entry.event === void 0 ? {} : { event: entry.event }
   });
   if (entry.expect !== void 0) {
+    if (entry.expect.refuses !== OUT_OF_SCOPE_CODE) {
+      problems.push(`${where} expects ${entry.expect.refuses} for an out-of-scope read, and \xA72.3's table names ${OUT_OF_SCOPE_CODE}`);
+    }
     try {
       await read(input, context);
-      problems.push(`${where} answered a call outside the confirmed scope: it must be refused with ${entry.expect.refuses}`);
+      problems.push(`${where} answered a call outside the confirmed scope: it must be refused with ${OUT_OF_SCOPE_CODE}: \u2026 Next step: \u2026`);
     } catch (error) {
-      if (!messageOf(error).includes(entry.expect.refuses)) {
-        problems.push(`${where} refused an out-of-scope call with "${messageOf(error)}", not the expected ${entry.expect.refuses}`);
+      const message = messageOf(error);
+      if (!message.startsWith(`${OUT_OF_SCOPE_CODE}: `) || !message.includes("Next step: ")) {
+        problems.push(`${where} refused an out-of-scope call with "${message}", not ${OUT_OF_SCOPE_CODE}: \u2026 Next step: \u2026`);
       }
     }
     return;
@@ -11173,7 +11188,16 @@ async function assertDetail(entry, detail, source, read, context, running, plugi
   } catch (error) {
     problems.push(`${where} failed inside the confirmed scope: ${messageOf(error)}`);
   }
-  problems.push(...outsideGrants(running.assertions.slice(assertedBefore), grantsFor(source), where));
+  problems.push(...outsideGrants(running.assertions.slice(assertedBefore), runningGrants, where));
+  const identity = identityGrantsFor(source, identityOperations);
+  for (const assertion of running.assertions.slice(assertedBefore)) {
+    const resources = assertion.resources.length > 0 ? assertion.resources : ["*"];
+    for (const resource of resources) {
+      if (identity.some((grant) => assertionMatches([{ action: assertion.action, resources: [resource] }], grant))) {
+        problems.push(`${where} asserts an identity operation: an identity read is not a content read, and a detail read must not reach one`);
+      }
+    }
+  }
 }
 function messageOf(error) {
   if (error instanceof Error) return error.message;

@@ -8,7 +8,6 @@
     },
     "items": {
       "minItems": 1,
-      "maxItems": 64,
       "type": "array",
       "items": {
         "oneOf": [
@@ -49,7 +48,6 @@
                 "type": "object",
                 "properties": {
                   "keys": {
-                    "maxItems": 8,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -74,7 +72,6 @@
                       },
                       "operations": {
                         "minItems": 1,
-                        "maxItems": 16,
                         "type": "array",
                         "items": {
                           "type": "string",
@@ -131,7 +128,6 @@
                       },
                       "units": {
                         "minItems": 1,
-                        "maxItems": 8,
                         "type": "array",
                         "items": {
                           "type": "object",
@@ -190,7 +186,6 @@
                       },
                       "units": {
                         "minItems": 1,
-                        "maxItems": 8,
                         "type": "array",
                         "items": {
                           "type": "object",
@@ -270,7 +265,6 @@
                 "maximum": 9007199254740991
               },
               "urlHosts": {
-                "maxItems": 8,
                 "type": "array",
                 "items": {
                   "type": "string",
@@ -290,7 +284,6 @@
                 "description": "The thing it reads."
               },
               "details": {
-                "maxItems": 16,
                 "type": "array",
                 "items": {
                   "type": "object",
@@ -307,7 +300,6 @@
                     },
                     "from": {
                       "minItems": 1,
-                      "maxItems": 8,
                       "type": "array",
                       "items": {
                         "type": "string",
@@ -347,7 +339,6 @@
                   },
                   "operations": {
                     "minItems": 1,
-                    "maxItems": 32,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -422,7 +413,6 @@
                 "type": "object",
                 "properties": {
                   "keys": {
-                    "maxItems": 8,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -447,7 +437,6 @@
                       },
                       "operations": {
                         "minItems": 1,
-                        "maxItems": 16,
                         "type": "array",
                         "items": {
                           "type": "string",
@@ -504,7 +493,6 @@
                       },
                       "units": {
                         "minItems": 1,
-                        "maxItems": 8,
                         "type": "array",
                         "items": {
                           "type": "object",
@@ -563,7 +551,6 @@
                       },
                       "units": {
                         "minItems": 1,
-                        "maxItems": 8,
                         "type": "array",
                         "items": {
                           "type": "object",
@@ -643,7 +630,6 @@
                 "maximum": 9007199254740991
               },
               "urlHosts": {
-                "maxItems": 8,
                 "type": "array",
                 "items": {
                   "type": "string",
@@ -681,7 +667,6 @@
                   },
                   "operations": {
                     "minItems": 1,
-                    "maxItems": 32,
                     "type": "array",
                     "items": {
                       "type": "string",

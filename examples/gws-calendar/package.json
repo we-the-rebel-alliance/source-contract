@@ -27,7 +27,6 @@
         "permission": {
           "events": "gws.events_list",
           "operations": [
-            "calendar.calendarList.get",
             "calendar.events.list"
           ]
         },
@@ -57,7 +56,6 @@
         "permission": {
           "tool": "gws.calendar_today",
           "operations": [
-            "calendar.calendars.get",
             "calendar.events.list"
           ]
         },

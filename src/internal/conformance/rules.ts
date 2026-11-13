@@ -23,31 +23,41 @@ export interface DeclarationOptions {
 }
 
 /**
- * The verbs a read may be named with, as tokens of a name: `get`, `list`, `read`, `search`, `query`, `fetch`, `count`,
- * `describe`, `probe`, `export`, `instances`, `status`, `lookup`, `view`, `history`, `find`.
- *
- * `export` and `instances` are reads here because a provider's own operation says so (`drive.files.export`,
- * `calendar.events.instances`). A plugin whose write tool is named `export` is still a write: the declaration says
- * `readOnly: true` for a read, and that is what conformance checks.
+ * The read verbs a name may lead with: `get`, `list`, `read`, `search`, `query`, `fetch`, `count`, `describe`,
+ * `probe`, `status`, `lookup`, `view`, `history`, `find`.
  */
-export const READ_VERBS: readonly string[] = ["get", "list", "read", "search", "query", "fetch", "count", "describe", "probe", "export", "instances", "status", "lookup", "view", "history", "find"]
+export const READ_VERBS: readonly string[] = ["get", "list", "read", "search", "query", "fetch", "count", "describe", "probe", "status", "lookup", "view", "history", "find"]
 
 /**
- * The verbs that change something or send something out, as tokens. A name is refused when its own verb is one of
- * these; a write word in an object position is fine (`get_issue`, `list_deleted_items`).
+ * The verb tokens that can only change something: a name carrying one anywhere is refused (Memory's promise, design
+ * comment index 6). Curated, and documented here as the one list: each is a verb whose only sense is a change or a
+ * send. A word that is also a noun is not here; it is in `NOUN_VERBS`.
  *
  * One string split at load, so the list is one line of data: a bundled array of quoted words would put "import" beside a
  * quote, and `npm run check:dist` reads that as an import statement.
  */
-const WRITE_VERB_WORDS = `send create update delete write post remove add set schedule upload download archive unarchive move merge close reopen approve reject share invite react draft complete run exec execute edit patch put push commit comment reply message broadcast follow block mute pin unpin star assign label lock trash forward dispatch clear flush reset truncate overwrite apply join leave ban toggle kick unban grant revoke transfer promote demote rename duplicate restore purge wipe drop attach detach notify escalate resolve decline cancel submit vote snooze dismiss acknowledge ack enable disable connect disconnect login logout signin signout mint issue verify hide unhide publish unpublish ingest index reindex sync import save like unlike generate mark bookmark print convert insert modify watch untrash empty mention subscribe unsubscribe subscribe pause resume retry rollback`
+const WRITE_VERB_WORDS = `delete remove send create update write insert patch put set add modify move trash archive revoke
+  grant share invite approve merge close reply forward upload publish unarchive unshare unsubscribe subscribe
+  watch untrash empty ban kick mute block follow pin unpin star unstar assign lock unlock overwrite truncate purge wipe
+  drop attach detach notify escalate resolve decline cancel submit vote snooze dismiss acknowledge ack enable disable
+  connect disconnect login logout signin signout mint verify hide unhide unpublish ingest index reindex sync import save
+  like unlike generate copy print convert schedule download`
 
-export const WRITE_VERBS: readonly string[] = WRITE_VERB_WORDS.split(" ")
+export const WRITE_VERBS: readonly string[] = WRITE_VERB_WORDS.split(/\s+/).filter((word) => word !== "")
+
+/**
+ * The tokens that are a verb only in a verb's position, and a noun anywhere else: a `post` is a thing, and `get_post`
+ * reads one; `export` is a provider's read (`drive.files.export`) and a plugin's commit tool alike. A tool name may not
+ * lead with one, and may not put one straight after its namespace.
+ */
+export const NOUN_VERBS: readonly string[] = ["issue", "post", "comment", "draft", "label", "message", "export", "mention", "note", "file", "bookmark"]
 
 /** Tokens that join two actions in one name (`get_and_save`, `getAndSend`): a name is one action. */
 export const JOINERS: readonly string[] = ["and", "then", "or"]
 
 const READ = new Set(READ_VERBS)
 const WRITE = new Set(WRITE_VERBS)
+const NOUN = new Set(NOUN_VERBS)
 const JOIN = new Set(JOINERS)
 
 const isVerb = (token: string): boolean => READ.has(token) || WRITE.has(token)
@@ -70,32 +80,32 @@ function joinerProblem(name: string, tokens: readonly string[]): string | undefi
   for (let index = 1; index < tokens.length - 1; index++) {
     const token = tokens[index] ?? ""
     const next = tokens[index + 1] ?? ""
-    if (JOIN.has(token) && isVerb(next)) return `"${name}" joins two actions with "${token}": name the one action it is`
+    if (JOIN.has(token) && (isVerb(next) || NOUN.has(next))) return `"${name}" joins two actions with "${token}": name the one action it is`
   }
-  return undefined
-}
-
-/** The first token of a name that is a verb, with its index, or undefined when the name has none. */
-function firstVerb(tokens: readonly string[]): { readonly verb: string; readonly index: number } | undefined {
-  for (const [index, token] of tokens.entries()) if (isVerb(token)) return { verb: token, index }
   return undefined
 }
 
 /**
  * Why a name is not a read's, or undefined when it is one.
  *
- * The name's own verb is the first token that is a verb: a read verb makes it a read, a write verb refuses it. The verb's
- * position is not fixed, because a name may put it after a namespace (`events_list`, `slack_read_channel`) or lead with
- * it (`get_issue`). A write word in an object position is no verb at all here (`get_issue` is a read of an issue). A name
- * with no verb is a noun name (`calendar_today`), which §2.2's own tools allow.
+ * 1. `and`/`then` followed by a verb makes a compound, and is refused.
+ * 2. An unambiguous write verb anywhere in the name is refused (Memory's promise).
+ * 3. The name's first token is where its verb sits. A read verb there makes it a read; a noun-verb there is a write
+ *    (`post_message`); a plain noun is a namespace or a noun name, and then the next token is the verb's position, so
+ *    `slack_post_message` is refused while `events_list` and `slack_read_channel` are reads and `calendar_today` names
+ *    no action at all.
  */
 export function nameProblem(name: unknown): string | undefined {
   if (typeof name !== "string" || name.length === 0) return "a read must be named"
   const tokens = tokensOf(name)
   const joiner = joinerProblem(name, tokens)
   if (joiner !== undefined) return joiner
-  const verb = firstVerb(tokens)
-  if (verb !== undefined && WRITE.has(verb.verb)) return `"${name}" carries the write verb ${verb.verb} where the name should carry the read's own verb`
+  const write = tokens.find((token) => WRITE.has(token))
+  if (write !== undefined) return `"${name}" carries the write verb ${write}: a read never sends, changes or watches`
+  const [first = "", second = ""] = tokens
+  if (READ.has(first)) return undefined
+  if (NOUN.has(first)) return `"${name}" leads with "${first}", which is a verb here and not a read verb`
+  if (NOUN.has(second)) return `"${name}" puts "${second}" where the verb sits, and it is not a read verb`
   return undefined
 }
 
@@ -103,28 +113,26 @@ export function nameProblem(name: unknown): string | undefined {
 export function readVerbProblem(name: unknown): string | undefined {
   const problem = nameProblem(name)
   if (problem !== undefined) return problem
-  const verb = firstVerb(tokensOf(name))
-  if (verb === undefined) return `"${String(name)}" carries no read verb (${READ_VERBS.join(", ")})`
+  if (!tokensOf(name).some((token) => READ.has(token))) return `"${String(name)}" carries no read verb (${READ_VERBS.join(", ")})`
   return undefined
 }
 
 /**
  * Why an operation is not a read's, or undefined when it is one.
  *
- * A dotted operation (`gmail.users.messages.get`) is a provider call, and its last segment is where its verb sits: the
- * first token of that segment that is a verb must be a read verb, so `insert`, `batchModify`, `watch`, `untrash` and
- * `emptyTrash` are refused without being listed, while `batchGet`, `export` and `instances` are reads. A bare operation
- * (`slack_read_channel`) is an MCP tool name and follows the same rule. An operation with no verb at all is refused: an
- * operation names how it reads.
+ * A dotted operation (`gmail.users.messages.get`) is a provider call, and its last segment is where its verb sits: no
+ * unambiguous write verb may appear in that segment. A noun there is fine, because a provider names a collection
+ * (`x.users.mentions`, `calendar.events.instances`, `drive.files.export`); `insert`, `batchModify`, `watch`, `untrash`
+ * and `emptyTrash` are refused without being listed as exceptions. A bare operation (`slack_read_channel`) is an MCP
+ * tool name and follows the same rule.
  */
 export function operationProblem(operation: unknown): string | undefined {
   if (typeof operation !== "string" || operation.length === 0) return "an operation must be named"
   const joiner = joinerProblem(operation, tokensOf(operation))
   if (joiner !== undefined) return joiner
   const segment = operation.includes(".") ? (operation.split(".").pop() ?? "") : operation
-  const verb = firstVerb(tokensOf(segment))
-  if (verb === undefined) return `"${operation}" carries no read verb in "${segment}" (${READ_VERBS.join(", ")}): a read never sends, changes or watches`
-  if (WRITE.has(verb.verb)) return `"${operation}" carries the write verb ${verb.verb} in "${segment}": a read never sends, changes or watches`
+  const write = tokensOf(segment).find((token) => WRITE.has(token))
+  if (write !== undefined) return `"${operation}" carries the write verb ${write} in "${segment}": a read never sends, changes or watches`
   return undefined
 }
 
@@ -282,11 +290,6 @@ export function declarationProblems(sources: unknown, options: DeclarationOption
       }
       const suggest = scope.suggest
       if (suggest !== undefined) {
-        if (tools !== undefined) {
-          const declared = toolOf(suggest.tool)
-          if (declared === undefined) problems.push(`${at}.scope.suggest names "${suggest.tool}", which the plugin does not declare`)
-          else if (declared.readOnly !== true) problems.push(`${at}.scope.suggest names "${suggest.tool}", which is not declared readOnly: true`)
-        }
         for (const operation of suggest.operations) {
           const problem = operationProblem(operation)
           if (problem !== undefined) problems.push(`${at}.scope.suggest.operations: ${problem}`)

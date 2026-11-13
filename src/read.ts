@@ -14,6 +14,7 @@
  */
 import type { InstalledDescriptor, SourceItem } from "./descriptor.ts"
 import { findSource, maxBytesOf } from "./descriptor.ts"
+import { canonicalScope } from "./cursor.ts"
 import type { Checked } from "./internal/checked.ts"
 import { PAGE, resultProblems } from "./internal/events.ts"
 import { failure, failureFromError, type ReadFailure } from "./internal/failure.ts"
@@ -108,10 +109,12 @@ export function checkReadRequest(request: ReadRequest): { readonly source: Sourc
   if (grant.descriptorHash !== installed.hash) {
     return refused("PERMISSION_DENIED", `${source.id}'s declaration changed since the person consented`, "Ask the person to review the source and consent again.")
   }
-  const scope = request.scope ?? grant.scope
-  if (!grantCovers(grant, { source: source.id, account: grant.account, ...(scope === undefined ? {} : { scope }) })) {
+  const asked = request.scope ?? grant.scope
+  if (!grantCovers(grant, { source: source.id, account: grant.account, ...(asked === undefined ? {} : { scope: asked }) })) {
     return refused("PERMISSION_DENIED", `the read asks for more of ${source.id} than the person granted`, "Read within the granted scope, or ask the person to widen it.")
   }
+  // One canonical form (keys and values sorted, no repeats), so a cursor's binding and a cache key agree (#7, D12).
+  const scope = asked === undefined ? undefined : (canonicalScope(asked) as Record<string, string[]>)
   if (source.kind === "events") {
     if (request.params !== undefined || request.pick !== undefined) return refused("SCHEMA_VIOLATION", "params and pick are for a snapshot source", "Pass cursor, since and limit to an events source.")
   } else {

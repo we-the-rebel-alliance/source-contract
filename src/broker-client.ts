@@ -20,6 +20,7 @@
  * Memory inside jelly, jelly's core plugin). Never find one by asking over RPC: an RPC id has no owner in OpenCode, so
  * another plugin could answer in the broker's name (app#2346, the ask of OpenCode).
  */
+import { canonicalScope } from "./cursor.ts"
 import { failureFromError } from "./internal/failure.ts"
 import { acceptAnswer, checkReadRequest, read, type ReadHost, type ReadOutcome, type ReadRequest } from "./read.ts"
 
@@ -80,7 +81,8 @@ export const BROKER_CODE_ALIASES: Readonly<Record<string, string>> = {
 
 /** The request a broker receives for a consumer's read: references to the installed package, never its descriptor or the grant. */
 export function brokerRequest(request: ReadRequest): BrokerRequest {
-  const scope = request.scope ?? request.grant.scope
+  const asked = request.scope ?? request.grant.scope
+  const scope = asked === undefined ? undefined : (canonicalScope(asked) as Record<string, string[]>)
   return {
     package: request.installed.package,
     version: request.installed.version,

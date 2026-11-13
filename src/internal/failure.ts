@@ -1,26 +1,15 @@
 /**
  * A read's failure, in the family's form: `CODE: what happened. Next step: …`.
  *
- * TODO(the family's events PR, app#2346 comment 6853236031): the error table with §2.1's additions lands in the
- * family's module; `read` then takes its codes and next steps from there, and this file goes.
+ * The codes are the one error table in `events` (`ERROR_CODES`, design §2.1). A plugin's code is read through
+ * `canonicalCode`: `AUTH_REQUIRED` is `NEEDS_SIGN_IN`, and contract 1's names (`EVENTS_CURSOR_INVALID`) are the
+ * table's.
  */
+import { canonicalCode, ERROR_CODES, type ErrorCode } from "./events.ts"
 
-/** The codes a read answers (design §2.1). `AUTH_REQUIRED` is read as `NEEDS_SIGN_IN`. */
-export const FAILURE_CODES = [
-  "NEEDS_SIGN_IN",
-  "ACCOUNT_MISMATCH",
-  "CURSOR_INVALID",
-  "CURSOR_EXPIRED",
-  "RATE_LIMITED",
-  "TOO_LARGE",
-  "SCHEMA_VIOLATION",
-  "PERMISSION_DENIED",
-  "UNAVAILABLE",
-  "SCOPE_MISSING",
-  "BUDGET_EXCEEDED",
-  "SOURCE_DISABLED",
-] as const
-export type FailureCode = (typeof FAILURE_CODES)[number]
+/** The codes a read answers: the events table. */
+export const FAILURE_CODES = ERROR_CODES
+export type FailureCode = ErrorCode
 
 /** A read that did not happen, or whose answer was refused. */
 export interface ReadFailure {
@@ -41,8 +30,6 @@ export function failure(code: FailureCode, what: string, next: string, retryAfte
   }
 }
 
-const ALIASES: Readonly<Record<string, FailureCode>> = { AUTH_REQUIRED: "NEEDS_SIGN_IN" }
-
 /**
  * A plugin's or a host's error as a read failure: its `code` (or the code its message starts with) when the contract
  * knows it, with `AUTH_REQUIRED` read as `NEEDS_SIGN_IN`; anything else is UNAVAILABLE, with the message's first line.
@@ -52,7 +39,8 @@ export function failureFromError(error: unknown): ReadFailure {
   const data = typeof record["data"] === "object" && record["data"] !== null ? (record["data"] as Record<string, unknown>) : {}
   const message = typeof record["message"] === "string" ? record["message"] : String(error)
   const raw = [record["code"], data["code"], /^([A-Z][A-Z_]+):/.exec(message)?.[1]].find((code): code is string => typeof code === "string")
-  const code = raw === undefined ? undefined : (ALIASES[raw] ?? ((FAILURE_CODES as readonly string[]).includes(raw) ? (raw as FailureCode) : undefined))
+  const canonical = raw === undefined ? undefined : canonicalCode(raw)
+  const code = canonical !== undefined && (FAILURE_CODES as readonly string[]).includes(canonical) ? (canonical as FailureCode) : undefined
   const first = message.split(/\r?\n/, 1)[0]!.slice(0, 300)
   const next = typeof data["next"] === "string" ? data["next"] : (/Next step: (.*)$/.exec(first)?.[1] ?? "Try again later; if it keeps failing, check the plugin's status.")
   const what = first.replace(/^[A-Z][A-Z_]+:\s*/, "").replace(/\s*Next step:.*$/, "")

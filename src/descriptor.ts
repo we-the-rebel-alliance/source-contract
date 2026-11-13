@@ -16,13 +16,14 @@ import { dirname, join } from "node:path"
 import * as z from "zod"
 import { SUPPORTED_CONTRACT_VERSIONS } from "./index.ts"
 import type { Checked } from "./internal/checked.ts"
+import { EVENT_KINDS, isEventKind, MAX_BYTES } from "./internal/events.ts"
 import { problemsOf } from "./internal/validator.ts"
 import type { ParamSpec } from "./params.ts"
 import { isOutputName, OUTPUT_NAMES } from "./registry.ts"
 
-/** The most bytes a source may declare for one answer (1 MB), and the default when it declares none (64 KB). */
-export const MAX_BYTES_LIMIT = 1024 * 1024
-export const DEFAULT_MAX_BYTES = 64 * 1024
+/** The most bytes a source may declare for one answer (1 MB), and the default when it declares none (64 KB): `events`' `MAX_BYTES`. */
+export const MAX_BYTES_LIMIT: number = MAX_BYTES.max
+export const DEFAULT_MAX_BYTES: number = MAX_BYTES.default
 
 /** Who may be asked, and how (design §2.2 `permission`). */
 export interface SourcePermission {
@@ -117,7 +118,7 @@ const item = z
     kind: z.enum(["events", "snapshot"]),
     tool: z.string().regex(METHOD, "must be a tools-RPC method name"),
     input: z.record(z.string(), z.unknown()).optional(),
-    reads: z.string().min(1).optional(),
+    reads: z.string().refine(isEventKind, `must be an event kind: ${EVENT_KINDS.join(", ")}, or x-<plugin>/<kind>`).optional(),
     output: z.string().optional(),
     params: z.record(z.string(), z.looseObject({ relative: z.boolean().optional(), me: z.boolean().optional() })).optional(),
     accounts: z.looseObject({ named: z.boolean().optional() }).optional(),

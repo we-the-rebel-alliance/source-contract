@@ -148,6 +148,21 @@ describe("read events", () => {
     assert.equal(params.ok ? "ok" : params.failure.code, "SCHEMA_VIOLATION")
     assert.equal(fake.calls.length, 0)
   })
+
+  test("checks the page against the events contract: a page with §2.1's additions passes, a broken one is SCHEMA_VIOLATION", async () => {
+    const grant = { ...grantFor("gws.gmail"), consumer: "memory" }
+    const request = { installed: gws, source: "gws.gmail", consumer: "memory", grant, context }
+    const extended = { ...page, refused: [{ external_id: "m-9", reason: "secret" }], gap: { reason: "expired", since: "2026-11-01T00:00:00.000Z" } }
+    assert.equal((await read(fakeHost(() => extended).host, request)).ok, true)
+    for (const broken of [
+      { ...page, owner: { id: `mailto:${ana}` } },
+      { ...page, events: [{ source: "gmail", account: ana, external_id: "m-1", kind: "message" }] },
+      { ...page, gap: { reason: "sync-token-expired", since: "2026-11-01T00:00:00Z" } },
+    ]) {
+      const outcome = await read(fakeHost(() => broken).host, request)
+      assert.equal(outcome.ok ? "ok" : outcome.failure.code, "SCHEMA_VIOLATION")
+    }
+  })
 })
 
 describe("detail reads", () => {

@@ -54,8 +54,36 @@ export interface ToolsRpcPlugin {
   readonly pluginError?: (error: unknown) => Failure | undefined
 }
 
+/** The suffix every tools-RPC id ends in: `<plugin id>.tools`. */
+export const TOOLS_RPC_SUFFIX = ".tools"
+
+/**
+ * A plugin id, as the 24 family plugins write theirs: lowercase dotted words, such as `google-workspace.gws`,
+ * `slack.workspace` or `charts`. This is OpenCode's plugin id, not the descriptor's source-id prefix (`gws`).
+ */
+export const PLUGIN_ID_PATTERN = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*$/
+
 /** The RPC id for a plugin id. */
-export const toolsRpcId = (pluginId: string) => `${pluginId}.tools`
+export const toolsRpcId = (pluginId: string) => `${pluginId}${TOOLS_RPC_SUFFIX}`
+
+/** True for a tools-RPC id: a plugin id, then `.tools`. At most 214 characters, the length of an npm name. */
+export const isToolsRpcId = (id: unknown): id is string =>
+  typeof id === "string" && id.length <= 214 && id.endsWith(TOOLS_RPC_SUFFIX) && PLUGIN_ID_PATTERN.test(id.slice(0, -TOOLS_RPC_SUFFIX.length))
+
+/** The plugin id of a tools-RPC id; undefined when it is not one. */
+export const pluginIdOf = (id: string): string | undefined => (isToolsRpcId(id) ? id.slice(0, -TOOLS_RPC_SUFFIX.length) : undefined)
+
+/**
+ * The problems with the tools-RPC id a descriptor declares (source-contract#4), one sentence each: it must be a
+ * tools-RPC id, and, when the consumer has the plugin's `describe` answer, the id that `describe` reports. `describe`
+ * is a diagnostic (RPC ids have no owner in OpenCode), so a mismatch means the descriptor or the install is wrong, never
+ * that the RPC answer wins.
+ */
+export function toolsRpcIdProblems(declared: unknown, described?: { readonly id?: unknown }): string[] {
+  if (!isToolsRpcId(declared)) return ["the tools-RPC id must be the plugin id and .tools, such as google-workspace.gws.tools"]
+  if (described !== undefined && described.id !== declared) return [`the plugin's describe reports the tools-RPC id ${String(described.id)}, not ${declared}`]
+  return []
+}
 
 // ── The shared part ──────────────────────────────────────────────────────
 
@@ -486,6 +514,7 @@ export async function registerToolsRpc(ctx: ToolsRpcContext, options: ToolsRpcOp
   const { mcp, methods, plugin } = options
   const NEXT_STEPS = plugin.nextSteps
   const TOOLS_RPC_ID = toolsRpcId(plugin.id)
+  if (!PLUGIN_ID_PATTERN.test(plugin.id)) throw new Error(`registerToolsRpc: the plugin id "${plugin.id}" must be lowercase dotted words, such as google-workspace.gws`)
   const shapeIn = options.shapers?.input ?? plugin.shapeInput ?? ((_method: string, input: unknown) => input)
   const shapeOut = options.shapers?.result ?? plugin.shapeResult ?? ((_method: string, result: McpResult) => result)
   const pluginError = (error: unknown) => plugin.pluginError?.(error)

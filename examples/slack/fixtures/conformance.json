@@ -810,9 +810,9 @@
             }
           },
           "expect": {
-            "refuses": "SCOPE_UNKNOWN"
+            "refuses": "INPUT_INVALID"
           },
-          "refuses": "SCOPE_UNKNOWN: this source reads channels, not users. Next step: confirm the channels to read."
+          "refuses": "INPUT_INVALID: this source reads channels, not users. Next step: confirm the channels to read."
         }
       ],
       "probe": {
@@ -822,7 +822,7 @@
         },
         "asserts": [
           {
-            "action": "slack_events_list",
+            "action": "slack.probe",
             "resource": "*"
           },
           {

@@ -1,0 +1,63 @@
+{
+  "name": "@joe-broadhead/opencode-github",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Example: github's events_list as contract version 1 declares it, with grants stated verbatim (github_api on a method and path). Every handle and message is invented.",
+  "sources": {
+    "contractVersion": 1,
+    "rpc": "github.activity.tools",
+    "probe": {
+      "action": "github.probe"
+    },
+    "items": [
+      {
+        "id": "github.activity",
+        "kind": "events",
+        "reads": "message",
+        "tool": "events_list",
+        "input": {
+          "source": "github"
+        },
+        "accounts": {
+          "named": true
+        },
+        "permission": {
+          "events": "github.events_list",
+          "rules": [
+            {
+              "action": "github_api",
+              "resource": "GET /user"
+            },
+            {
+              "action": "github_api",
+              "resource": "GET /search/issues"
+            },
+            {
+              "action": "github_api",
+              "resource": "GET /search/commits"
+            },
+            {
+              "action": "github_api",
+              "resource": "GET /notifications"
+            }
+          ]
+        },
+        "private": true,
+        "cost": {
+          "class": "metered",
+          "units": [
+            {
+              "per": "request",
+              "usd": 0
+            }
+          ]
+        },
+        "maxBytes": 262144,
+        "urlHosts": [
+          "github.com"
+        ]
+      }
+    ]
+  }
+}

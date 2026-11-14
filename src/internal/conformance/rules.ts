@@ -6,6 +6,7 @@
  * generated JSON Schema (`dist/schemas/sources.json`) carries every shape it can; each rule here says why it cannot.
  */
 import { SOURCES_SCHEMA } from "../../schema.ts"
+import { isEventKindIn, sourceNamespace } from "../events.ts"
 import { PUBLIC_SUFFIX_RULES } from "./public-suffix-list.ts"
 import type { Detail, SourceItem } from "../schema/types.ts"
 
@@ -155,6 +156,9 @@ export function operationProblem(operation: unknown): string | undefined {
   return undefined
 }
 
+/** The most bytes an inline `outputSchema` may take, measured as compact JSON. */
+export const MAX_OUTPUT_SCHEMA_BYTES = 32768
+
 /** Every field of a contract-1 event. */
 export const EVENT_FIELDS: readonly string[] = ["external_id", "kind", "occurred_at", "title", "text", "url", "thread", "actors", "labels", "hash"]
 
@@ -254,6 +258,8 @@ export function declarationProblems(sources: unknown, options: DeclarationOption
     if (!isSourceItem(item)) continue
     const at = `items[${index}] (${item.id})`
     const head = item.id.split(".")[0] ?? item.id
+    const operations: readonly string[] = item.permission.operations ?? []
+    const rules: readonly { readonly action: string; readonly resource: string }[] = item.permission.rules ?? []
 
     for (const named of itemTools(item)) {
       const verb = nameProblem(named.name)
@@ -272,14 +278,48 @@ export function declarationProblems(sources: unknown, options: DeclarationOption
     const verb = nameProblem(action)
     if (verb !== undefined) problems.push(`${at}.permission.${item.kind === "events" ? "events" : "tool"}: ${verb}`)
 
-    for (const operation of item.permission.operations) {
+    for (const operation of operations) {
       const problem = operationProblem(operation)
       if (problem !== undefined) problems.push(`${at}.permission.operations: ${problem}`)
     }
-    for (const operation of unique(item.permission.operations)) {
-      if (item.permission.operations.filter((entry) => entry === operation).length > 1) {
+    for (const operation of unique(operations)) {
+      if (operations.filter((entry) => entry === operation).length > 1) {
         problems.push(`${at}.permission.operations lists "${operation}" twice: an operation is granted once`)
       }
+    }
+
+    // One rule, not two regexes: `events` says whether a kind is in the source's namespace (D13, #15).
+    const namespace = sourceNamespace(item.id)
+    if (item.kind === "events" && !isEventKindIn(item.reads, namespace)) {
+      problems.push(`${at}.reads "${item.reads}" is not a core kind, or an extension kind in the namespace "${namespace}"`)
+    }
+    if (item.kind === "snapshot") {
+      if (item.output.startsWith("x-") && !isEventKindIn(item.output, namespace)) {
+        problems.push(`${at}.output "${item.output}" is an extension name in another namespace, and this source is in "${namespace}"`)
+      }
+      if (item.output.startsWith("x-")) {
+        const bytes = item.outputSchema === undefined ? 0 : new TextEncoder().encode(JSON.stringify(item.outputSchema)).length
+        if (bytes > MAX_OUTPUT_SCHEMA_BYTES) {
+          problems.push(`${at}.outputSchema is ${bytes} bytes of compact JSON, over the ${MAX_OUTPUT_SCHEMA_BYTES}-byte cap`)
+        }
+      }
+    }
+    // A probe's identity operations are not content, and never both (#4, #8).
+    for (const rule of rules) {
+      if (typeof rule.action !== "string" || typeof rule.resource !== "string") problems.push(`${at}.permission.rules entries must be { action, resource }`)
+    }
+    const identity = item.permission.identity ?? []
+    for (const operation of identity) {
+      const problem = operationProblem(operation)
+      if (problem !== undefined) problems.push(`${at}.permission.identity: ${problem}`)
+      // It must also be one of the source's operations (declared equals asserted overall, #4); the kit refuses a
+      // content *run* that asserts it.
+      if (!(item.permission.operations ?? []).includes(operation)) {
+        problems.push(`${at}.permission.identity lists "${operation}", which permission.operations does not: a source's operations are everything its reads assert, identity included`)
+      }
+    }
+    for (const operation of unique(identity as readonly string[])) {
+      if (identity.filter((entry) => entry === operation).length > 1) problems.push(`${at}.permission.identity lists "${operation}" twice`)
     }
 
     const details = item.kind === "events" ? (item.details ?? []) : []
@@ -312,7 +352,7 @@ export function declarationProblems(sources: unknown, options: DeclarationOption
         for (const operation of suggest.operations) {
           const problem = operationProblem(operation)
           if (problem !== undefined) problems.push(`${at}.scope.suggest.operations: ${problem}`)
-          if (item.permission.operations.includes(operation)) {
+          if ((item.permission.operations ?? []).includes(operation)) {
             problems.push(`${at}.scope.suggest.operations lists "${operation}", which permission.operations also lists: a bind-time read must not enter the running grant`)
           }
         }
@@ -358,6 +398,9 @@ function isSourceItem(value: unknown): value is SourceItem {
   if (!permission["operations"].every((operation) => typeof operation === "string")) return false
   const action = kind === "events" ? permission["events"] : permission["tool"]
   if (typeof action !== "string") return false
+  if (permission["operations"] === undefined && permission["rules"] === undefined) return false
+  const identity = permission["identity"]
+  if (identity !== undefined && (!Array.isArray(identity) || !identity.every((operation) => typeof operation === "string"))) return false
   const details = value["details"]
   if (details !== undefined && !Array.isArray(details)) return false
   if (Array.isArray(details) && !details.every(isDetail)) return false
@@ -370,6 +413,12 @@ function isSourceItem(value: unknown): value is SourceItem {
       if (!plain(suggest) || typeof suggest["tool"] !== "string" || !Array.isArray(suggest["operations"])) return false
       if (!suggest["operations"].every((operation) => typeof operation === "string")) return false
     }
+  }
+  if (kind === "events" && typeof value["reads"] !== "string") return false
+  if (kind === "snapshot") {
+    if (typeof value["output"] !== "string") return false
+    const schema = value["outputSchema"]
+    if (schema !== undefined && typeof schema !== "boolean" && !plain(schema)) return false
   }
   const hosts = value["urlHosts"]
   if (hosts !== undefined && (!Array.isArray(hosts) || !hosts.every((host) => typeof host === "string"))) return false

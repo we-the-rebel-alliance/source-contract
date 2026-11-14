@@ -1,0 +1,239 @@
+{
+  "$comment": "Sanitised: every handle, id and message is invented. The page's runs assert github_api on the four method-and-path resources, with no account prefix.",
+  "plugin": "@joe-broadhead/opencode-github",
+  "account": "octo@example.test",
+  "tools": [
+    {
+      "id": "events_list",
+      "readOnly": true
+    }
+  ],
+  "sources": {
+    "github.activity": {
+      "identity": [],
+      "cases": [
+        {
+          "name": "a page of notifications",
+          "input": {
+            "source": "github",
+            "account": "octo@example.test"
+          },
+          "expect": "page",
+          "asserts": [
+            {
+              "action": "github.events_list",
+              "resource": "*"
+            },
+            {
+              "action": "github_api",
+              "resource": "GET /user"
+            },
+            {
+              "action": "github_api",
+              "resource": "GET /search/issues"
+            },
+            {
+              "action": "github_api",
+              "resource": "GET /search/commits"
+            },
+            {
+              "action": "github_api",
+              "resource": "GET /notifications"
+            }
+          ],
+          "answer": {
+            "source": "github",
+            "plugin": "@joe-broadhead/opencode-github",
+            "account": "octo@example.test",
+            "owner": {
+              "id": "github:octocat",
+              "label": "Octocat"
+            },
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "trust": "untrusted",
+            "events": [
+              {
+                "source": "github",
+                "account": "octo@example.test",
+                "external_id": "notification:1",
+                "kind": "message",
+                "occurred_at": "2026-11-12T09:00:00.000Z",
+                "thread": null,
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "github:octocat",
+                    "name": "Octocat"
+                  }
+                ],
+                "title": "A review was requested",
+                "text": "Review requested on octo/repo#7",
+                "url": "https://github.com/octo/repo/pull/7",
+                "labels": [
+                  "notification"
+                ],
+                "hash": "sha256:64a9ba54514e1b1368f9301fcb996931e6a849f521f91734d6771b691b5f35ba"
+              }
+            ],
+            "cursor": "github:1",
+            "more": false,
+            "refused": [
+              {
+                "external_id": "notification:2",
+                "reason": "secret",
+                "detail": "token"
+              }
+            ],
+            "failed": []
+          }
+        },
+        {
+          "name": "an expired cursor answers a gap",
+          "input": {
+            "source": "github",
+            "account": "octo@example.test",
+            "cursor": "github:stale"
+          },
+          "expect": "expired",
+          "asserts": [
+            {
+              "action": "github.events_list",
+              "resource": "*"
+            }
+          ],
+          "answer": {
+            "source": "github",
+            "plugin": "@joe-broadhead/opencode-github",
+            "account": "octo@example.test",
+            "owner": {
+              "id": "github:octocat",
+              "label": "Octocat"
+            },
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "trust": "untrusted",
+            "events": [
+              {
+                "source": "github",
+                "account": "octo@example.test",
+                "external_id": "notification:1",
+                "kind": "message",
+                "occurred_at": "2026-11-12T09:00:00.000Z",
+                "thread": null,
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "github:octocat",
+                    "name": "Octocat"
+                  }
+                ],
+                "title": "A review was requested",
+                "text": "Review requested on octo/repo#7",
+                "url": "https://github.com/octo/repo/pull/7",
+                "labels": [
+                  "notification"
+                ],
+                "hash": "sha256:64a9ba54514e1b1368f9301fcb996931e6a849f521f91734d6771b691b5f35ba"
+              }
+            ],
+            "cursor": "github:2",
+            "more": false,
+            "refused": [
+              {
+                "external_id": "notification:2",
+                "reason": "secret",
+                "detail": "token"
+              }
+            ],
+            "failed": [],
+            "gap": {
+              "reason": "expired",
+              "since": "2026-11-06T00:00:00.000Z"
+            }
+          }
+        },
+        {
+          "name": "the restarted window reads on",
+          "input": {
+            "cursor": "github:2"
+          },
+          "expect": "page",
+          "asserts": [
+            {
+              "action": "github.events_list",
+              "resource": "*"
+            }
+          ],
+          "answer": {
+            "source": "github",
+            "plugin": "@joe-broadhead/opencode-github",
+            "account": "octo@example.test",
+            "owner": {
+              "id": "github:octocat",
+              "label": "Octocat"
+            },
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "trust": "untrusted",
+            "events": [
+              {
+                "source": "github",
+                "account": "octo@example.test",
+                "external_id": "notification:1",
+                "kind": "message",
+                "occurred_at": "2026-11-12T09:00:00.000Z",
+                "thread": null,
+                "actors": [
+                  {
+                    "role": "from",
+                    "id": "github:octocat",
+                    "name": "Octocat"
+                  }
+                ],
+                "title": "A review was requested",
+                "text": "Review requested on octo/repo#7",
+                "url": "https://github.com/octo/repo/pull/7",
+                "labels": [
+                  "notification"
+                ],
+                "hash": "sha256:64a9ba54514e1b1368f9301fcb996931e6a849f521f91734d6771b691b5f35ba"
+              }
+            ],
+            "cursor": "github:2",
+            "more": false,
+            "refused": [
+              {
+                "external_id": "notification:2",
+                "reason": "secret",
+                "detail": "token"
+              }
+            ],
+            "failed": [],
+            "gap": {
+              "reason": "window-truncated",
+              "since": "2026-10-13T09:00:00.000Z"
+            }
+          }
+        }
+      ],
+      "probe": {
+        "input": {
+          "source": "github.activity",
+          "account": "octo@example.test"
+        },
+        "asserts": [
+          {
+            "action": "github.probe",
+            "resource": "*"
+          }
+        ],
+        "answer": {
+          "account": "octo@example.test",
+          "owner": {
+            "id": "github:octocat",
+            "label": "Octocat"
+          }
+        }
+      },
+      "details": []
+    }
+  }
+}

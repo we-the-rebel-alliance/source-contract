@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
   SOURCES_SCHEMA
-} from "./chunk-AXAGCSNI.js";
+} from "./chunk-NMQ5EA4F.js";
 import {
   SUPPORTED_CONTRACT_VERSIONS
 } from "./chunk-ELPJD3ND.js";
@@ -12,8 +12,9 @@ import {
 } from "./chunk-WJ4C2MR4.js";
 import {
   OUTPUT_NAMES,
+  isExtensionOutput,
   isOutputName
-} from "./chunk-UGUA267L.js";
+} from "./chunk-6HDIB2SA.js";
 import {
   _enum,
   array,
@@ -25,7 +26,7 @@ import {
   record,
   string,
   unknown
-} from "./chunk-6RDMPYYW.js";
+} from "./chunk-W5SHR7DQ.js";
 
 // src/descriptor.ts
 import { createHash } from "node:crypto";
@@ -63,7 +64,10 @@ var item = looseObject({
   permission: looseObject({
     events: action.optional(),
     tool: action.optional(),
-    operations: array(operation).min(1, "must name at least one operation: grants and off switches key on them")
+    operations: array(operation).min(1, "must name at least one operation: grants and off switches key on them").optional(),
+    // A provider whose resources are method-and-path (GitHub's `github_api` on `GET /user`) states its grants
+    // verbatim; `operationRule` derives from `operations` for every other provider (#4, from the github plugin).
+    rules: array(object({ action, resource: string().min(1).max(200) })).min(1).optional()
   }),
   private: boolean().optional(),
   cost: looseObject({ class: _enum(["free", "metered", "billed"]), units: array(price).optional(), probe: price.optional() }),
@@ -80,7 +84,9 @@ var item = looseObject({
     if (source.output !== void 0) problem(["output"], "only a snapshot source has an output");
   } else {
     if (source.output === void 0) problem(["output"], `a snapshot source must name its output (${OUTPUT_NAMES.join(", ")})`);
-    else if (!isOutputName(source.output)) problem(["output"], `"${source.output}" is not a registered output (${OUTPUT_NAMES.join(", ")})`);
+    else if (!isOutputName(source.output) && !isExtensionOutput(source.output)) {
+      problem(["output"], `"${source.output}" is not a registered output (${OUTPUT_NAMES.join(", ")}) and not an x-<namespace>/<name>`);
+    }
     if (source.permission.tool === void 0) problem(["permission", "tool"], "a snapshot source must name its method's action");
     if (source.details !== void 0) problem(["details"], "only an events source has detail reads");
   }

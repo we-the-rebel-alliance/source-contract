@@ -34,6 +34,9 @@
             "gmail.users.history.list",
             "gmail.users.messages.list",
             "gmail.users.messages.get"
+          ],
+          "identity": [
+            "gmail.users.getProfile"
           ]
         },
         "private": true,
@@ -46,6 +49,10 @@
           "mail.google.com"
         ]
       }
-    ]
+    ],
+    "rpc": "google-workspace.gws.tools",
+    "probe": {
+      "action": "gws.probe"
+    }
   }
 }

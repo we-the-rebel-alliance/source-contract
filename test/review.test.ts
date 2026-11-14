@@ -1,5 +1,6 @@
 // The review's cases, one test per finding: every check the reviewer defeated, and every false refusal.
 import assert from "node:assert/strict"
+import { validPage } from "./support/valid-page.ts"
 import { readFileSync } from "node:fs"
 import { describe, test } from "node:test"
 import { SOURCES_SCHEMA } from "../src/schema.ts"
@@ -172,11 +173,12 @@ describe("names and verbs, tokenised", () => {
 })
 
 describe("scope.suggest keeps its own operations out of the running grant", () => {
-  const suggested = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+  const suggested = (over: Record<string, unknown> = {}): Record<string, unknown> => validPage({
     id: "slack.workspace",
     kind: "events",
     reads: "message",
     tool: "events_list",
+    input: { source: "slack" },
     accounts: { named: false },
     scope: { keys: ["channels"], describe: "Channels", suggest: { tool: "slack_list_user_channels", operations: ["slack_list_user_channels"] } },
     permission: { events: "slack_events_list", operations: ["slack_read_user_profile", "slack_read_channel"] },
@@ -212,11 +214,12 @@ describe("urlHosts uses the full Public Suffix List", () => {
 })
 
 describe("a report is incomplete when a check did not run", () => {
-  const item = (): Record<string, unknown> => ({
+  const item = (): Record<string, unknown> => validPage({
     id: "slack.workspace",
     kind: "events",
     reads: "message",
     tool: "events_list",
+    input: { source: "slack" },
     accounts: { named: false },
     permission: { events: "slack_events_list", operations: ["slack_slack_read_channel", "slack_slack_read_user_profile"] },
     cost: { class: "free" },
@@ -273,17 +276,18 @@ describe("a report is incomplete when a check did not run", () => {
 })
 
 describe("probe may assert only the identity operations", () => {
-  const item = (): Record<string, unknown> => ({
+  const item = (): Record<string, unknown> => validPage({
     id: "gws.gmail",
     kind: "events",
     reads: "message",
     tool: "events_list",
+    input: { source: "gws" },
     accounts: { named: true },
     permission: { events: "gws.events_list", operations: ["gmail.users.getProfile", "gmail.users.messages.list"] },
     cost: { class: "free" },
   })
-  const page = (): Record<string, unknown> => ({
-    source: "gws.gmail",
+  const page = (): Record<string, unknown> => validPage({
+    source: "gws",
     plugin: "@joe-broadhead/opencode-gws",
     account: "sam.rivera@example.com",
     owner: null,
@@ -325,19 +329,20 @@ describe("probe may assert only the identity operations", () => {
 })
 
 describe("details must refuse an event outside the confirmed scope", () => {
-  const item = (): Record<string, unknown> => ({
+  const item = (): Record<string, unknown> => validPage({
     id: "slack.workspace",
     kind: "events",
     reads: "message",
     tool: "events_list",
+    input: { source: "slack" },
     accounts: { named: false },
     scope: { keys: ["channels"], describe: "Channels" },
     details: [{ id: "slack.workspace.thread", tool: "slack_read_thread", from: ["thread"] }],
     permission: { events: "slack_events_list", operations: ["slack_read_user_profile", "slack_read_channel", "slack_read_thread"] },
     cost: { class: "free" },
   })
-  const page = (): Record<string, unknown> => ({
-    source: "slack.workspace",
+  const page = (): Record<string, unknown> => validPage({
+    source: "slack",
     plugin: PLUGIN,
     account: ACCOUNT,
     owner: null,
@@ -419,17 +424,18 @@ describe("details must refuse an event outside the confirmed scope", () => {
 })
 
 describe("the three mutations the reviewer killed", () => {
-  const item = (): Record<string, unknown> => ({
+  const item = (): Record<string, unknown> => validPage({
     id: "slack.workspace",
     kind: "events",
     reads: "message",
     tool: "events_list",
+    input: { source: "slack" },
     accounts: { named: false },
     permission: { events: "slack_events_list", operations: ["slack_read_user_profile", "slack_read_channel"] },
     cost: { class: "free" },
   })
-  const page = (): Record<string, unknown> => ({
-    source: "slack.workspace",
+  const page = (): Record<string, unknown> => validPage({
+    source: "slack",
     plugin: PLUGIN,
     account: ACCOUNT,
     owner: null,
@@ -505,11 +511,12 @@ describe("the conformance-only rules", () => {
     { id: "slack_read_thread", readOnly: true },
     { id: "slack_list_user_channels", readOnly: true },
   ]
-  const base = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+  const base = (over: Record<string, unknown> = {}): Record<string, unknown> => validPage({
     id: "slack.workspace",
     kind: "events",
     reads: "message",
     tool: "events_list",
+    input: { source: "slack" },
     accounts: { named: false },
     permission: { events: "slack_events_list", operations: ["slack_read_channel"] },
     cost: { class: "free" },
@@ -524,6 +531,20 @@ describe("the conformance-only rules", () => {
     { rule: "a duplicate source id", item: () => base() },
     { rule: "a tool not declared read-only", item: () => base({ tool: "slack_send_message" }) },
     { rule: "a suggest operation also in the running grant", item: () => base({ scope: { keys: ["channels"], describe: "Channels", suggest: { tool: "slack_list_user_channels", operations: ["slack_list_user_channels"] } }, permission: { events: "slack_events_list", operations: ["slack_read_channel", "slack_list_user_channels"] } }) },
+    { rule: "an extension name in another namespace", item: () => base({ reads: "x-other/suggestion" }) },
+    {
+      rule: "an output schema over 32 KB",
+      item: () => ({
+        id: "mem.receipts",
+        kind: "snapshot",
+        tool: "snapshot_read",
+        output: "x-mem/receipt",
+        outputSchema: { type: "object", properties: Object.fromEntries(Array.from({ length: 900 }, (_, index) => [`k${index}`, { type: "string", description: "x".repeat(40) }])) },
+        accounts: { named: false },
+        permission: { tool: "mem.snapshot_read", operations: ["mem.receipts.list"] },
+        cost: { class: "free" },
+      }),
+    },
   ]
 
   const file = readFileSync(new URL("../test/conformance-only.json", import.meta.url), "utf8")
@@ -542,17 +563,18 @@ describe("the conformance-only rules", () => {
 // The re-check's cases.
 
 describe("the running session's unused-grant check", () => {
-  const item = (): Record<string, unknown> => ({
+  const item = (): Record<string, unknown> => validPage({
     id: "gws.gmail",
     kind: "events",
     reads: "message",
     tool: "events_list",
+    input: { source: "gws" },
     accounts: { named: true },
     permission: { events: "gws.events_list", operations: ["gmail.users.getProfile", "gmail.users.messages.list"] },
     cost: { class: "free" },
   })
-  const page = (): Record<string, unknown> => ({
-    source: "gws.gmail",
+  const page = (): Record<string, unknown> => validPage({
+    source: "gws",
     plugin: "@joe-broadhead/opencode-gws",
     account: "sam.rivera@example.com",
     cursor: "c1",
@@ -591,18 +613,19 @@ describe("the running session's unused-grant check", () => {
 })
 
 describe("identity operations", () => {
-  const item = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+  const item = (over: Record<string, unknown> = {}): Record<string, unknown> => validPage({
     id: "gws.gmail",
     kind: "events",
     reads: "message",
     tool: "events_list",
+    input: { source: "gws" },
     accounts: { named: true },
     permission: { events: "gws.events_list", operations: ["gmail.users.getProfile", "gmail.users.messages.list"] },
     cost: { class: "free" },
     ...over,
   })
-  const page = (): Record<string, unknown> => ({
-    source: "gws.gmail",
+  const page = (): Record<string, unknown> => validPage({
+    source: "gws",
     plugin: "@joe-broadhead/opencode-gws",
     account: "sam.rivera@example.com",
     cursor: "c1",
@@ -741,19 +764,20 @@ describe("the verb rule keeps Memory's promise", () => {
 })
 
 describe("an out-of-scope detail read refuses with a defined code", () => {
-  const item = (): Record<string, unknown> => ({
+  const item = (): Record<string, unknown> => validPage({
     id: "slack.workspace",
     kind: "events",
     reads: "message",
     tool: "events_list",
+    input: { source: "slack" },
     accounts: { named: false },
     scope: { keys: ["channels"], describe: "Channels" },
     details: [{ id: "slack.workspace.thread", tool: "slack_read_thread", from: ["thread"] }],
     permission: { events: "slack_events_list", operations: ["slack_read_user_profile", "slack_read_channel", "slack_read_thread"] },
     cost: { class: "free" },
   })
-  const page = (): Record<string, unknown> => ({
-    source: "slack.workspace",
+  const page = (): Record<string, unknown> => validPage({
+    source: "slack",
     plugin: PLUGIN,
     account: ACCOUNT,
     cursor: "c1",
@@ -841,11 +865,12 @@ describe("an out-of-scope detail read refuses with a defined code", () => {
 })
 
 describe("the page fields that are absent, and the limits §2.2 does not state", () => {
-  const item = (): Record<string, unknown> => ({
+  const item = (): Record<string, unknown> => validPage({
     id: "slack.workspace",
     kind: "events",
     reads: "message",
     tool: "events_list",
+    input: { source: "slack" },
     accounts: { named: false },
     permission: { events: "slack_events_list", operations: ["slack_read_user_profile", "slack_read_channel"] },
     cost: { class: "free" },
@@ -853,11 +878,11 @@ describe("the page fields that are absent, and the limits §2.2 does not state",
   const options = () => ({ source: sourceOf(item()), plugin: PLUGIN, input: {} })
 
   test("a page without refused[] or failed[] is accepted", () => {
-    assert.deepEqual(pageProblems({ source: "slack.workspace", plugin: PLUGIN, cursor: "c1", more: false, events: [] }, options()), [])
+    assert.deepEqual(pageProblems(validPage({ source: "slack", cursor: "c1", more: false, events: [] }), options()), [])
   })
 
-  test("a cursor longer than 1024 characters is accepted", () => {
-    assert.deepEqual(pageProblems({ source: "slack.workspace", plugin: PLUGIN, cursor: "c".repeat(5000), more: true, events: [] }, options()), [])
+  test("a cursor over 1024 characters is refused by the events contract", () => {
+    assert.ok(pageProblems(validPage({ source: "slack", cursor: "c".repeat(5000), more: true, events: [] }), options()).some((problem) => /cursor/.test(problem)))
   })
 
   test("scope keys and price units have no ceiling §2.2 does not state", () => {
@@ -871,7 +896,7 @@ describe("the page fields that are absent, and the limits §2.2 does not state",
 })
 
 describe("a page fetched atomically", () => {
-  const item = (): Record<string, unknown> => ({
+  const item = (): Record<string, unknown> => validPage({
     id: "gws.calendar",
     kind: "events",
     reads: "meeting",
@@ -881,7 +906,7 @@ describe("a page fetched atomically", () => {
     permission: { events: "gws.events_list", operations: ["calendar.calendarList.get", "calendar.events.list"] },
     cost: { class: "free" },
   })
-  const page = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+  const page = (over: Record<string, unknown> = {}): Record<string, unknown> => validPage({
     source: "calendar",
     plugin: "@joe-broadhead/opencode-gws",
     account: "sam.rivera@example.com",
@@ -949,7 +974,7 @@ describe("a page fetched atomically", () => {
 })
 
 describe("the kit drives the secret screening from a fixture", () => {
-  const item = (): Record<string, unknown> => ({
+  const item = (): Record<string, unknown> => validPage({
     id: "gws.gmail",
     kind: "events",
     reads: "message",
@@ -959,7 +984,7 @@ describe("the kit drives the secret screening from a fixture", () => {
     permission: { events: "gws.events_list", operations: ["gmail.users.messages.list"] },
     cost: { class: "free" },
   })
-  const page = (events: Record<string, unknown>[]): Record<string, unknown> => ({
+  const page = (events: Record<string, unknown>[]): Record<string, unknown> => validPage({
     source: "gmail",
     plugin: "@joe-broadhead/opencode-gws",
     account: "sam.rivera@example.com",

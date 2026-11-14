@@ -42,6 +42,9 @@
             "slack_read_user_profile",
             "slack_read_channel",
             "slack_read_thread"
+          ],
+          "identity": [
+            "slack_read_user_profile"
           ]
         },
         "private": true,
@@ -56,6 +59,10 @@
           "source": "slack"
         }
       }
-    ]
+    ],
+    "rpc": "slack.workspace.tools",
+    "probe": {
+      "action": "slack.probe"
+    }
   }
 }

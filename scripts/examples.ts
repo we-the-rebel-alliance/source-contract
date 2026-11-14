@@ -35,6 +35,8 @@ export interface RecordedSource {
   readonly snapshot?: (RecordedCall & { readonly input?: Readonly<Record<string, unknown>> | undefined }) | undefined
   readonly identity?: readonly string[] | undefined
   readonly atomicPages?: { readonly reason: string } | undefined
+  readonly rpc?: string | undefined
+  readonly probeAction?: { readonly action: string } | undefined
 }
 
 /** One recorded call: its input, the assertions it made, and its answer or its refusal. */
@@ -101,6 +103,17 @@ export function loadExamples(root: string): Example[] {
 }
 
 /** Run the schema and the kit over every example: none may fail, and every declared source must be exercised. */
+/** The declaration's plugin-level keys, when it names them. */
+function declaredPlugin(sources: unknown): { readonly sources?: { readonly rpc?: string | undefined; readonly probe?: { readonly action: string } | undefined } } {
+  if (sources === null || typeof sources !== "object") return {}
+  const record = sources as Record<string, unknown>
+  const rpc = typeof record["rpc"] === "string" ? record["rpc"] : undefined
+  const probe = record["probe"] !== null && typeof record["probe"] === "object" ? (record["probe"] as { action?: unknown }) : undefined
+  const action = typeof probe?.action === "string" ? probe.action : undefined
+  if (rpc === undefined && action === undefined) return {}
+  return { sources: { ...(rpc === undefined ? {} : { rpc }), ...(action === undefined ? {} : { probe: { action } }) } }
+}
+
 export async function runExamples({ root, schema, conformance, events }: ExampleModules): Promise<ExampleResult[]> {
   const results: ExampleResult[] = []
   for (const example of loadExamples(root)) {
@@ -141,6 +154,7 @@ export async function runExamples({ root, schema, conformance, events }: Example
         plugin: pkg.name,
         source,
         tools,
+        ...declaredPlugin(pkg.sources),
         ...(fixture.account === undefined ? {} : { account: fixture.account }),
         ...(recorded.identity === undefined ? {} : { identityOperations: recorded.identity }),
         ...(recorded.atomicPages === undefined ? {} : { atomicPages: recorded.atomicPages }),

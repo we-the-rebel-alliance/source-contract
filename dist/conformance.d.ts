@@ -19,7 +19,7 @@ export { DETAIL_FIELDS, EVENT_FIELDS, JOINERS, READ_VERBS, WRITE_VERBS, tokensOf
 export type { DeclarationOptions, ToolDeclaration } from "./internal/conformance/rules.js";
 export { assertionMatches, recordingPermission, sameResource, unusedGrants } from "./internal/conformance/permission.js";
 export type { AssertInput, Assertion, Grant, RecordingPermission, SessionContext } from "./internal/conformance/permission.js";
-export { instant, pageChecks, pageProblems } from "./internal/conformance/page.js";
+export { pageChecks, pageProblems } from "./internal/conformance/page.js";
 export type { PageChecks, PageOptions } from "./internal/conformance/page.js";
 export { probeProblems } from "./internal/conformance/probe.js";
 export { SENTINEL, detailInput, detailInputProblems, scopeProblems, syntheticEvent } from "./internal/conformance/details.js";

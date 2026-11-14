@@ -43,8 +43,10 @@ export interface SourceItem {
     readonly input?: Readonly<Record<string, unknown>>;
     /** An events source's event kind. */
     readonly reads?: string;
-    /** A snapshot source's output, a registered schema. */
+    /** A snapshot source's output: a registry name, or `x-<namespace>/<name>`. */
     readonly output?: string;
+    /** An `x-` output's schema, inline: JSON Schema draft 2020-12. Absent for a registry name. */
+    readonly outputSchema?: Readonly<Record<string, unknown>> | boolean;
     readonly params?: Readonly<Record<string, ParamSpec>>;
     readonly accounts?: {
         readonly named?: boolean;

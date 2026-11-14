@@ -84,9 +84,9 @@ describe("the hash", () => {
 })
 
 describe("the frame", () => {
-  test("requires permission.operations", () => {
+  test("requires permission.operations or permission.rules", () => {
     assert.match(problemsOf(withItem((item) => (item.permission.operations = []))).join("\n"), /items\[0\]\.permission\.operations/)
-    assert.match(problemsOf(withItem((item) => delete item.permission.operations)).join("\n"), /permission\.operations/)
+    assert.match(problemsOf(withItem((item) => delete item.permission.operations)).join("\n"), /operations/)
   })
 
   test("requires a snapshot's output to be registered, and an events source's event kind", () => {

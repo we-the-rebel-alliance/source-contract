@@ -1,3 +1,4 @@
+import * as z from "zod"
 /**
  * The conformance kit: one report per source, from a declaration and the plugin's own answers.
  *
@@ -33,6 +34,8 @@ import {
   type Grant,
   type SessionContext,
 } from "./permission.ts"
+import { sessionRules } from "../../permission.ts"
+import { toolsRpcIdProblems } from "../../tools-rpc.ts"
 import { pageChecks, type PageOptions } from "./page.ts"
 import { probeProblems } from "./probe.ts"
 import { detailInput, detailInputProblems, scopeProblems, type DetailCallInput } from "./details.ts"
@@ -98,8 +101,12 @@ export interface SourceConformanceOptions {
   readonly identityOperations?: readonly string[] | undefined
   /** The account the kit hands a read; a display value, never a grant. */
   readonly account?: string | undefined
-  /** The grants to run under. Default: the kit's provisional derivation from the declaration. */
+  /** The grants to run under. Default: the app's `permission.sessionRules`, so there is one derivation. */
   readonly grants?: readonly Grant[] | undefined
+  /** The declaration's plugin-level keys: `sources.rpc` and `sources.probe.action` (#4, #8). */
+  readonly sources?: { readonly rpc?: string | undefined; readonly probe?: { readonly action: string } | undefined } | undefined
+  /** The plugin's `describe` answer, for the tools-RPC id diagnostic. */
+  readonly describe?: { readonly id?: unknown } | undefined
   /**
    * Set when a page is fetched atomically: one provider call answers the whole page, so no single item can fail on its
    * own and `failed[]` can never be produced (Calendar's `events.list` is one). The `failed-holds-cursor` check is then
@@ -125,6 +132,8 @@ export interface ConformanceReport {
   readonly plugin: string
   /** The identity operations the kit was told a probe may assert, so a reader sees them. */
   readonly identityOperations: readonly string[]
+  /** The plugin's probe action, when the declaration names one. */
+  readonly probeAction?: string | undefined
   readonly checks: readonly ConformanceCheck[]
   readonly problems: readonly string[]
   readonly ok: boolean
@@ -149,6 +158,7 @@ const CHECKS = [
   "probe",
   "details",
   "suggest",
+  "output-schema",
   "unused-grants",
 ] as const
 
@@ -164,8 +174,14 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   const account = options.account ?? "conformance"
   // Declared must equal asserted overall: an identity operation is one of the source's operations, so the running
   // session already holds it, and no content read may assert it.
-  const identityOperations = options.identityOperations ?? []
-  const runningGrants = options.grants ?? grantsFor(source)
+  const declaredIdentity = source.permission.identity
+  const probeAction = options.sources?.probe?.action
+  const identityOperations = declaredIdentity ?? options.identityOperations ?? []
+  const declaredProbe = options.sources?.probe?.action
+  const runningGrants = options.grants ?? [
+    ...grantsFor(source, account),
+    ...(declaredProbe === undefined ? [] : [{ action: declaredProbe, resource: "*" }]),
+  ]
   const running = recordingPermission(runningGrants)
   const identityGrants = identityGrantsFor(source, identityOperations)
   const identity: string[] = []
@@ -245,7 +261,7 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   add("billed-cost", cost, source.cost.class === "billed" && isEvents, source.cost.class !== "billed")
 
   for (const operation of identityOperations) {
-    if (!source.permission.operations.includes(operation)) {
+    if (!(source.permission.operations ?? []).includes(operation)) {
       identity.push(`${operation} is declared an identity operation and is not among permission.operations: a source's operations are everything its reads assert, identity included`)
     }
   }
@@ -259,7 +275,8 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   }
   const probeAssertions = running.assertions.slice(assertedBeforeProbe)
   if (probeAssertions.length === 0) probe.push(`probe(${source.id}) asserted nothing: it reads the identity under its own grant`)
-  probe.push(...identityProblems(probeAssertions, source, options.identityOperations ?? []))
+  const declared = probeAction !== undefined
+  probe.push(...identityProblems(probeAssertions, source, identityOperations, declared ? probeAction : undefined))
   add("probe", probe)
 
   const details: string[] = []
@@ -309,6 +326,8 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   add("suggest", suggest, suggested !== undefined, suggested === undefined)
 
   const snapshot: string[] = []
+  const outputSchema: string[] = []
+  const extensionOutput = !isEvents && /^x-/.test(source.output)
   if (!isEvents) {
     const snapshotCases = options.snapshotCases ?? []
     if (calls.snapshot === undefined) snapshot.push("the source is a snapshot and the kit has no snapshot call, so its grants cannot be checked")
@@ -316,8 +335,9 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
       for (const input of snapshotCases) {
         const assertedBeforeSnapshot = running.assertions.length
         try {
-          await calls.snapshot(input, context)
+          const answer = await calls.snapshot(input, context)
           identity.push(...identityOverlap(running.assertions.slice(assertedBeforeSnapshot), identityGrants, `snapshot_read(${JSON.stringify(input)})`))
+          if (extensionOutput) outputSchema.push(...snapshotDataProblems(answer, source))
         } catch (error) {
           snapshot.push(`snapshot_read(${JSON.stringify(input)}) failed: ${messageOf(error)}`)
         }
@@ -327,6 +347,15 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
   }
 
   add("identity-grants", identity)
+  // An x- output has no registry schema: its inline outputSchema is what a snapshot's data must satisfy.
+  add("output-schema", outputSchema, extensionOutput && snapshot.length === 0, !extensionOutput)
+  const rpc = options.sources?.rpc
+  add(
+    "rpc-id",
+    rpc === undefined ? [] : [...toolsRpcIdProblems(rpc, options.describe)],
+    rpc !== undefined,
+    rpc === undefined,
+  )
 
   const unused = unusedGrants(runningGrants, running.assertions).map(
     (grant) => `the declaration grants ${grant.action} on ${grant.resource}, which no read asserts: a source's grants are exactly what it asserts`,
@@ -345,7 +374,16 @@ export async function sourceConformance(options: SourceConformanceOptions): Prom
 
   const problems = checks.flatMap((check) => check.problems)
   const incomplete = checks.some((check) => !check.ran && !check.notApplicable)
-  return { source: source.id, plugin, identityOperations, checks, problems, ok: problems.length === 0 && !incomplete, incomplete }
+  return {
+    source: source.id,
+    plugin,
+    identityOperations,
+    ...(probeAction === undefined ? {} : { probeAction }),
+    checks,
+    problems,
+    ok: problems.length === 0 && !incomplete,
+    incomplete,
+  }
 }
 
 /** `sourceConformance`, for a test or a check: throws one error naming every problem. */
@@ -482,6 +520,18 @@ function outsideGrants(assertions: readonly Assertion[], grants: readonly Grant[
   return problems
 }
 
+/**
+ * A snapshot's `data` against the inline `outputSchema` of an `x-` output. The registry's names are checked by the app's
+ * `registry`, so this runs only for an extension.
+ */
+function snapshotDataProblems(answer: unknown, source: SourceItem): string[] {
+  if (source.kind !== "snapshot" || source.outputSchema === undefined) return ["the source is an x- output and states no outputSchema"]
+  if (!plain(answer)) return ["snapshot_read answered nothing: an object with data and asOf"]
+  const checked = z.fromJSONSchema(source.outputSchema as never).safeParse(answer["data"])
+  if (checked.success) return []
+  return checked.error.issues.map((issue) => `snapshot_read data at ${issue.path.length === 0 ? "the value" : issue.path.map(String).join(".")}: ${issue.message}`)
+}
+
 /** A content read may not assert an identity operation: those belong to the probe. */
 function identityOverlap(assertions: readonly Assertion[], identityGrants: readonly Grant[], where: string): string[] {
   const problems: string[] = []
@@ -497,8 +547,13 @@ function identityOverlap(assertions: readonly Assertion[], identityGrants: reado
 }
 
 /** A probe may assert the source's own action and its identity operations, and nothing else. */
-function identityProblems(assertions: readonly Assertion[], source: SourceItem, identityOperations: readonly string[]): string[] {
-  const action = source.kind === "events" ? source.permission.events : source.permission.tool
+function identityProblems(
+  assertions: readonly Assertion[],
+  source: SourceItem,
+  identityOperations: readonly string[],
+  probeAction?: string,
+): string[] {
+  const action = probeAction ?? (source.kind === "events" ? source.permission.events : source.permission.tool)
   const head = source.id.split(".")[0] ?? source.id
   const allowed: Grant[] = [{ action, resource: "*" }]
   for (const operation of identityOperations) {
@@ -515,6 +570,12 @@ function identityProblems(assertions: readonly Assertion[], source: SourceItem, 
       if (!allowed.some((grant) => assertionMatches([{ action: assertion.action, resources: [resource] }], grant))) {
         problems.push(`probe(${source.id}) asserts ${assertion.action} on ${resource}, which is not an identity operation: a probe reads the account, never content`)
       }
+    }
+  }
+  // Declared means exact: every grant the declaration names must be asserted, not only "nothing outside".
+  for (const grant of allowed) {
+    if (probeAction !== undefined && !assertionMatches(assertions, grant)) {
+      problems.push(`probe(${source.id}) does not assert ${grant.action} on ${grant.resource}, which the declaration names`)
     }
   }
   return problems

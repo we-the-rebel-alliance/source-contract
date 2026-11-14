@@ -10,22 +10,28 @@
  * `internal/conformance/rules.ts`.
  */
 import * as z from "zod"
+import { isEventKind } from "../events.ts"
+import { isToolsRpcId } from "../../tools-rpc.ts"
 import { MAX_BYTES_DEFAULT, MAX_BYTES_LIMIT } from "./types.ts"
 
 /** A source id: at least two dotted lowercase segments. */
 const SOURCE_ID = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/
 /** A tool name: lowercase words joined by underscores. */
 const TOOL_NAME = /^[a-z][a-z0-9_]{0,63}$/
-/** What a source reads: a lowercase word. */
-const READS = /^[a-z][a-z0-9-]{0,31}$/
 /** A permission action: dotted (`gws.events_list`), or a namespaced tool (`slack_events_list`). */
 const ACTION = /^(?:[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*|[a-z][a-z0-9]*_[a-z][a-z0-9_]*)$/
 /** A provider operation: a dotted API operation, or a bare MCP tool name. */
 const OPERATION = /^[A-Za-z][A-Za-z0-9._-]{0,199}$/
 /** A scope key: a lowercase word. */
 const SCOPE_KEY = /^[a-z][a-z0-9_]{0,31}$/
-/** A name in the output registry: a lowercase word. */
-const OUTPUT_NAME = /^[a-z][a-z0-9-]{0,31}$/
+/** A core name: a lowercase word. */
+const CORE_NAME = /^[a-z][a-z0-9-]{0,31}$/
+/** A registry output's name: a lowercase word. */
+const REGISTRY_NAME = /^[a-z][a-z0-9-]{0,31}$/
+/** An extension name's shape, for `isEventKind` to judge: `x-<namespace>/<name>`, both lowercase words. */
+const EXTENSION_NAME = /^x-[a-z][a-z0-9-]*\/[a-z][a-z0-9-]*$/
+/** True for a registry name, or an extension name. The namespace rule is conformance's, from `events`. */
+const isOutputName = (name: string): boolean => REGISTRY_NAME.test(name) || isEventKind(name)
 /** A price unit's name: a lowercase word. */
 const PRICE_PER = /^[a-z][a-z0-9-]{0,31}$/
 /** An exact host, or `*.` and a registrable domain. */
@@ -99,10 +105,37 @@ const detail = z
   .describe("One read of an event's detail: the tool, and the event fields its input comes from.")
 
 const permissionBase = {
+  identity: z
+    .array(z.string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" }))
+    .min(1)
+    .optional()
+    .describe("The identity operations probe asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it."),
   operations: z
     .array(z.string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" }))
     .min(1)
-    .describe("Every operation the source's reads assert, and nothing else."),
+    .optional()
+    .describe("Every operation the source's reads assert, and nothing else. Absent when `rules` states them."),
+  rules: z
+    .array(
+      z
+        .object({
+          action: z.string().max(80).regex(ACTION, { error: "must be a permission action such as github_api" }),
+          resource: z.string().max(200).describe("The resource the action is asserted on, such as GET /user."),
+        })
+        .strict(),
+    )
+    .min(1)
+    .optional()
+    .describe("The grants verbatim, for a provider whose resources are not <account>:<operation> (GitHub's github_api on GET /user)."),
+}
+
+const permissionEither = (value: { readonly operations?: unknown; readonly rules?: unknown }, ctx: z.RefinementCtx): void => {
+  if (value.operations === undefined && value.rules === undefined) {
+    ctx.addIssue({ code: "custom", message: "a permission states its operations, or its rules verbatim" })
+  }
+  if (value.operations !== undefined && value.rules !== undefined) {
+    ctx.addIssue({ code: "custom", message: "a permission states operations or rules, not both" })
+  }
 }
 
 const permissionEvents = z
@@ -112,6 +145,7 @@ const permissionEvents = z
     ...permissionBase,
   })
   .strict()
+  .superRefine(permissionEither)
   .describe("The events_list action, and the provider operations the source asserts.")
 
 const permissionTool = z
@@ -121,6 +155,7 @@ const permissionTool = z
     ...permissionBase,
   })
   .strict()
+  .superRefine(permissionEither)
   .describe("The read tool's action, and the provider operations the source asserts.")
 
 const cadence = z
@@ -161,7 +196,11 @@ const events = z
   .object({
     ...common,
     kind: z.literal("events"),
-    reads: z.string().max(32).regex(READS, { error: "must be a lowercase word such as message" }).describe("The thing it reads."),
+    reads: z
+      .string()
+      .max(64)
+      .refine(isEventKind, { error: "must be a core kind such as message, or x-<namespace>/<name>" })
+      .describe("The thing it reads: a core kind, or x-<namespace>/<name>, whose namespace is the source's."),
     details: z.array(detail).optional(),
     permission: permissionEvents,
     output: z.never({ error: "an events source has no output: output belongs to a snapshot" }).optional(),
@@ -177,9 +216,13 @@ const snapshot = z
     kind: z.literal("snapshot"),
     output: z
       .string()
-      .max(32)
-      .regex(OUTPUT_NAME, { error: "must be a lowercase name such as agenda" })
-      .describe("The name of its schema in the output registry. The registry itself is the app's."),
+      .max(64)
+      .refine(isOutputName, { error: "must be a registry name such as agenda, or x-<namespace>/<name>" })
+      .describe("A registry name, or x-<namespace>/<name>; an x- output carries its schema inline."),
+    outputSchema: z
+      .union([z.boolean(), z.looseObject({})])
+      .optional()
+      .describe("An x- output's schema, inline: JSON Schema draft 2020-12. Required for x-, absent for a registry name."),
     params: z.looseObject({}).optional().describe("The parameters a consumer may pass, resolved by the library at read time."),
     permission: permissionTool,
     maxAgeSec: z.int().min(1).optional().describe("How long a result may be reused before it is read again."),
@@ -188,6 +231,15 @@ const snapshot = z
   })
   .strict()
   .describe("A snapshot source: the latest state, read on demand.")
+  .superRefine((value, ctx) => {
+    const extension = value.output.startsWith("x-")
+    if (extension && value.outputSchema === undefined) {
+      ctx.addIssue({ code: "custom", path: ["outputSchema"], message: "an x- output has no registry schema, so the item carries its outputSchema inline" })
+    }
+    if (!extension && value.outputSchema !== undefined) {
+      ctx.addIssue({ code: "custom", path: ["outputSchema"], message: "a registry output names its schema, so outputSchema belongs only to an x- output" })
+    }
+  })
 
 const source = z.discriminatedUnion("kind", [events, snapshot])
 
@@ -195,6 +247,17 @@ const source = z.discriminatedUnion("kind", [events, snapshot])
 export const sourcesSchema = z
   .object({
     contractVersion: z.literal(1),
+    rpc: z
+      .string()
+      .max(200)
+      .refine(isToolsRpcId, { error: "must be a tools-RPC id: the plugin id and .tools, such as google-workspace.gws.tools" })
+      .optional()
+      .describe("The plugin's tools-RPC id (#4, #8), which a consumer calls instead of mapping the package."),
+    probe: z
+      .object({ action: z.string().max(80).regex(ACTION, { error: "must be a dotted action such as gws.probe" }) })
+      .strict()
+      .optional()
+      .describe("The plugin's one probe tool, and the permission action it asserts (#4, #8)."),
     items: z.array(source).min(1).describe("The plugin's sources. A source id is unique across the declaration."),
   })
   .strict()

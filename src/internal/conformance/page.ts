@@ -1,17 +1,17 @@
 /**
- * The page result of `events_list`, contract version 1 (§2.1): the fields Memory's checks read, and nothing else.
+ * The page result of `events_list`: the `events` module's shape, plus Memory's three checks.
  *
- * The page and the event are the `events` module's shape. This file does not define them: it reads the only fields the
- * checks below need — `events[].external_id`, `refused[]`, `failed[]`, `cursor`, `more`, `gap` and `cost` — through a
- * narrow interface, and it checks `source` and `plugin` so a page can be attributed to the source it belongs to. When the
- * `events` module lands its validator, this adopts it and the narrow reads go. The envelope's `account`, `owner`, `asOf`
- * and `trust`, and every other event field, are not checked here.
+ * The shape is the authority's: `resultProblems` (the same call `read` makes) validates the envelope, every event, the
+ * lists of drops, `gap` and `cost`, and types the page as `EventsListResult`. On top of it this file keeps only what
+ * Memory adds:
  *
- * The checks: `failed[]` holds the cursor back, `refused[]` is final, `gap` is shaped and runs forwards, and a billed
- * source reports its cost.
+ * - `failed[]` holds the cursor back: a page with a retryable drop answers the cursor it was called with;
+ * - `refused[]` is final, and the family's `secretKinds` runs over every page, so an event holding a secret is refused
+ *   rather than delivered;
+ * - a billed source reports its `cost`.
  */
+import { MAX_PAGE_BYTES, PAGE, REFUSAL_REASONS, isEventKindIn, resultProblems, secretKinds, sourceNamespace, type EventsListResult } from "../events.ts"
 import type { SourceItem } from "../schema/types.ts"
-import { REFUSAL_REASONS, secretKinds } from "../events.ts"
 
 /** What a page is checked against. */
 export interface PageOptions {
@@ -20,19 +20,19 @@ export interface PageOptions {
   readonly plugin: string
   /** The input the call was made with, so `failed[]` can be held against the cursor it must not advance. */
   readonly input: Readonly<Record<string, unknown>>
-  /** True for a detail read, which answers one event: it has no cursor to hold back and no page to resume. */
+  /** True for a detail read, which answers one event: it has no cursor to hold back. */
   readonly detail?: boolean | undefined
 }
 
 /** The page's problems, by concern. */
 export interface PageChecks {
-  /** The attribution, the cursor and the two lists of drops. */
+  /** The authority's problems: the envelope, every event, the drops, `gap` and `cost`'s shape. */
   readonly shape: readonly string[]
-  /** `failed[]` holds the cursor back, and an empty page still carries one. */
+  /** `failed[]` holds the cursor back. */
   readonly cursor: readonly string[]
-  /** `gap` is shaped, and its window runs forwards. */
+  /** `gap`'s shape is the authority's; this stays for the round-trip the kit also checks. */
   readonly gap: readonly string[]
-  /** A refused id is never also an event: a refusal is final. */
+  /** A refused id is never also an event, and an event holding a secret is refused. */
   readonly refused: readonly string[]
   /** `cost` is reported by a billed source. */
   readonly cost: readonly string[]
@@ -40,123 +40,63 @@ export interface PageChecks {
 
 const plain = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
 
-/** An ISO date-time with an offset, as §2.1 writes `gap.since`. */
-export const instant = (value: unknown): value is string =>
-  typeof value === "string" && !Number.isNaN(Date.parse(value)) && /(?:Z|[+-]\d{2}:\d{2})$/.test(value)
-
 /** The page's problems, by concern. */
 export function pageChecks(answer: unknown, options: PageOptions): PageChecks {
-  const shape: string[] = []
+  const shape = [...resultProblems(answer, PAGE.max, MAX_PAGE_BYTES)]
+  // A source read through a page is not the app's: its plugin is the one that answered, so the page must name it.
+  const page = answer as EventsListResult
+  if (plain(answer) && answer["plugin"] !== options.plugin) {
+    shape.push(`the page names plugin ${JSON.stringify(answer["plugin"])}, not ${options.plugin}`)
+  }
+  if (plain(answer) && answer["source"] !== namedSource(options.source)) {
+    shape.push(`the page names source ${JSON.stringify(answer["source"])}, not ${namedSource(options.source)}`)
+  }
+
   const cursor: string[] = []
-  const gap: string[] = []
-  const refused: string[] = []
-  const cost: string[] = []
-  const where = "the page"
-  if (!plain(answer)) return { shape: ["the page is not an object"], cursor: [], gap: [], refused: [], cost: [] }
-
-  // A page names the source as the plugin's own tool names it (`input.source`, such as gmail), not the dotted contract
-  // id (gws.gmail): §2.2 keeps the two apart, and `events`' SOURCE_PATTERN accepts only the former.
-  const named = typeof options.source.input?.["source"] === "string" ? (options.source.input["source"] as string) : options.source.id
-  if (answer["source"] !== named) shape.push(`${where} names source ${JSON.stringify(answer["source"])}, not ${named}`)
-  if (answer["plugin"] !== options.plugin) shape.push(`${where} names plugin ${JSON.stringify(answer["plugin"])}, not ${options.plugin}`)
-  if (typeof answer["cursor"] !== "string") shape.push(`${where} cursor must be a string`)
-  if (typeof answer["more"] !== "boolean") shape.push(`${where} more must be true or false`)
-
-  const events = answer["events"]
-  if (!Array.isArray(events)) shape.push(`${where} events must be a list`)
-  const refusedEntries = entries(answer["refused"], `${where} refused`, shape, "refused")
-  const failed = entries(answer["failed"], `${where} failed`, shape, "failed")
-  gapChecks(answer["gap"], where, gap)
-  costChecks(answer["cost"], options.source, where, cost)
-
-  const seen = new Set<string>()
-  for (const [index, event] of (Array.isArray(events) ? events : []).entries()) {
-    if (!plain(event) || typeof event["external_id"] !== "string" || event["external_id"].length === 0) {
-      shape.push(`${where} events[${index}] has no external_id`)
-      continue
-    }
-    seen.add(event["external_id"])
-    // The family's screening, used here so a fixture proves it: an event carrying a secret belongs in refused[].
-    const kinds = secretKinds([event["title"], event["text"]].filter((value) => typeof value === "string").join("\n"))
-    if (kinds.length > 0) {
-      refused.push(`${where} lists ${event["external_id"]} as an event, and its text holds a secret (${kinds.join(", ")}): it belongs in refused[] with reason "secret"`)
-    }
-  }
-  for (const id of new Set(refusedEntries)) {
-    if (seen.has(id)) refused.push(`${where} lists ${id} as an event and in refused[]: a refusal is final`)
-  }
-
-  if (options.detail !== true && failed.length > 0) {
+  if (options.detail !== true && Array.isArray(page?.failed) && page.failed.length > 0) {
     const held = typeof options.input["cursor"] === "string" ? options.input["cursor"] : ""
-    if (answer["cursor"] !== held) {
-      cursor.push(`${where} failed[] holds the cursor back, and this page answered ${JSON.stringify(answer["cursor"])} instead of ${JSON.stringify(held)}`)
+    if (page.cursor !== held) {
+      cursor.push(`the page failed[] holds the cursor back, and this page answered ${JSON.stringify(page.cursor)} instead of ${JSON.stringify(held)}`)
     }
   }
-  if (options.detail !== true && Array.isArray(events) && events.length === 0 && answer["more"] === false && answer["cursor"] === "") {
-    cursor.push(`${where} is empty and carries no cursor: a later call must be able to resume`)
+
+  const refused: string[] = []
+  for (const [index, event] of (Array.isArray(page?.events) ? page.events : []).entries()) {
+    // An extension kind belongs to its source's namespace (#15, through `events`' one rule).
+    if (event.kind.startsWith("x-") && !isEventKindIn(event.kind, sourceNamespace(options.source.id))) {
+      shape.push(`the page events[${index}] has the kind ${event.kind}, which is in another namespace than the source "${sourceNamespace(options.source.id)}"`)
+    }
+    const kinds = secretKinds([event.title, event.text].filter(Boolean).join("\n"))
+    if (kinds.length > 0) {
+      refused.push(`the page events[${index}] holds a secret (${kinds.join(", ")}): it belongs in refused[] with reason "secret"`)
+    }
   }
-  return { shape, cursor, gap, refused, cost }
+  if (plain(answer) && Array.isArray(answer["refused"])) {
+    for (const [index, entry] of answer["refused"].entries()) {
+      if (plain(entry) && !(REFUSAL_REASONS as readonly unknown[]).includes(entry["reason"])) {
+        refused.push(`the page refused[${index}] names no reason of ${REFUSAL_REASONS.join(", ")}`)
+      }
+    }
+  }
+
+  const cost: string[] = []
+  if (plain(answer) && answer["cost"] === undefined && options.source.cost.class === "billed") {
+    cost.push("the page cost is missing: a billed source reports what the provider charged")
+  }
+  return { shape, cursor, gap: [], refused, cost }
 }
 
-/** Every problem with a page, one sentence each. An empty list means the checks that apply found nothing. */
+/** Every problem with a page, one sentence each. */
 export function pageProblems(answer: unknown, options: PageOptions): string[] {
   const checks = pageChecks(answer, options)
   return [...checks.shape, ...checks.cursor, ...checks.gap, ...checks.refused, ...checks.cost]
 }
 
 /**
- * `refused[]` or `failed[]`: each entry a final or retryable drop, with the id and the reason. Absent is fine: a source
- * that never drops anything may omit the list. The fields are the `events` module's: a refusal's `reason` is one of
- * `REFUSAL_REASONS` and its `detail` is optional, and a failure's `code` is an error code.
+ * The name a page gives its source: the plugin's own (`input.source`, such as gmail), not the dotted contract id
+ * (`gws.gmail`), because `events`' `SOURCE_PATTERN` accepts only a lowercase name.
  */
-function entries(value: unknown, where: string, problems: string[], kind: "refused" | "failed"): string[] {
-  if (value === undefined) return []
-  if (!Array.isArray(value)) {
-    problems.push(`${where} must be a list`)
-    return []
-  }
-  const found: string[] = []
-  for (const [index, entry] of value.entries()) {
-    if (!plain(entry) || typeof entry["external_id"] !== "string" || entry["external_id"].length === 0) {
-      problems.push(`${where}[${index}] must name the external_id it dropped`)
-      continue
-    }
-    if (kind === "refused") {
-      if (!(REFUSAL_REASONS as readonly unknown[]).includes(entry["reason"])) {
-        problems.push(`${where}[${index}] names no reason: a refusal is one of ${REFUSAL_REASONS.join(", ")}`)
-      }
-      if (entry["detail"] !== undefined && (typeof entry["detail"] !== "string" || entry["detail"].length > 200 || /\n/.test(entry["detail"]))) {
-        problems.push(`${where}[${index}].detail must be one line of at most 200 characters`)
-      }
-    } else if (typeof entry["code"] !== "string" || !/^[A-Z][A-Z0-9_]*$/.test(entry["code"])) {
-      problems.push(`${where}[${index}].code must be an error code such as RATE_LIMITED`)
-    }
-    found.push(entry["external_id"])
-  }
-  return found
-}
-
-/** `gap: { reason, since, until? }` when history was lost. */
-function gapChecks(value: unknown, where: string, problems: string[]): void {
-  if (value === undefined) return
-  if (!plain(value)) {
-    problems.push(`${where} gap must be an object`)
-    return
-  }
-  const reason = value["reason"]
-  if (reason !== "expired" && reason !== "window-truncated") problems.push(`${where} gap.reason must be expired or window-truncated`)
-  if (!instant(value["since"])) problems.push(`${where} gap.since must be an ISO date-time with an offset`)
-  if (value["until"] !== undefined && !instant(value["until"])) problems.push(`${where} gap.until must be an ISO date-time with an offset`)
-  if (instant(value["since"]) && instant(value["until"]) && Date.parse(value["since"]) > Date.parse(value["until"])) {
-    problems.push(`${where} gap.since is after gap.until`)
-  }
-}
-
-/** `cost`, what the provider reported: required for a billed source. */
-function costChecks(value: unknown, source: SourceItem, where: string, problems: string[]): void {
-  if (value === undefined) {
-    if (source.cost.class === "billed") problems.push(`${where} cost is missing: a billed source reports what the provider charged`)
-    return
-  }
-  if (!plain(value)) problems.push(`${where} cost must be an object`)
+function namedSource(source: SourceItem): string {
+  const named = source.input?.["source"]
+  return typeof named === "string" ? named : source.id
 }

@@ -6,5 +6,7 @@
   "a urlHosts pattern too broad to mean anything",
   "a duplicate source id",
   "a tool not declared read-only",
-  "a suggest operation also in the running grant"
+  "a suggest operation also in the running grant",
+  "an extension name in another namespace",
+  "an output schema over 32 KB"
 ]

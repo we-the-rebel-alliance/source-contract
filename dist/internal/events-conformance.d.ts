@@ -59,6 +59,11 @@ export interface ConformanceFixtures {
     readonly maxBytes?: number;
     /** The kinds the source declares (`reads`): every event is one of them. */
     readonly kinds?: readonly string[];
+    /**
+     * The source id's first segment (`jelly` for `jelly.routine-runs`): every `x-` kind must be in it (decision D13).
+     * Without it, any well-formed `x-<namespace>/<kind>` passes.
+     */
+    readonly namespace?: string;
     /** The external_ids a full listing from `since` refuses, in order. */
     readonly refused?: readonly string[];
     /** Passed as `scope` on every call. */

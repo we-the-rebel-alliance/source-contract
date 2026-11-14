@@ -13,8 +13,28 @@ export interface ToolsRpcPlugin {
     /** The block's `pluginError`: a plugin failure's code, what happened and its next step; none when absent. */
     readonly pluginError?: (error: unknown) => Failure | undefined;
 }
+/** The suffix every tools-RPC id ends in: `<plugin id>.tools`. */
+export declare const TOOLS_RPC_SUFFIX = ".tools";
+/**
+ * A plugin id, as the 24 family plugins write theirs: lowercase dotted words, such as `google-workspace.gws`,
+ * `slack.workspace` or `charts`. This is OpenCode's plugin id, not the descriptor's source-id prefix (`gws`).
+ */
+export declare const PLUGIN_ID_PATTERN: RegExp;
 /** The RPC id for a plugin id. */
 export declare const toolsRpcId: (pluginId: string) => string;
+/** True for a tools-RPC id: a plugin id, then `.tools`. At most 214 characters, the length of an npm name. */
+export declare const isToolsRpcId: (id: unknown) => id is string;
+/** The plugin id of a tools-RPC id; undefined when it is not one. */
+export declare const pluginIdOf: (id: string) => string | undefined;
+/**
+ * The problems with the tools-RPC id a descriptor declares (source-contract#4), one sentence each: it must be a
+ * tools-RPC id, and, when the consumer has the plugin's `describe` answer, the id that `describe` reports. `describe`
+ * is a diagnostic (RPC ids have no owner in OpenCode), so a mismatch means the descriptor or the install is wrong, never
+ * that the RPC answer wins.
+ */
+export declare function toolsRpcIdProblems(declared: unknown, described?: {
+    readonly id?: unknown;
+}): string[];
 export type JsonSchema = Readonly<Record<string, unknown>>;
 /** An MCP method's result: the tool's structured content, when it has any, and its text parts joined by newlines. */
 export interface McpResult {

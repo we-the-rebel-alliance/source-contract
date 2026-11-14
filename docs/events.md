@@ -35,7 +35,7 @@ copy's import path. `src/events.ts` is the entry; the code is under `src/interna
 | Errors: the draft's table + `SCOPE_MISSING`, `BUDGET_EXCEEDED`, `SOURCE_DISABLED`; `AUTH_REQUIRED` aliases `NEEDS_SIGN_IN`; the message is `CODE: what happened. Next step: …` | each plugin's own codes | `ERROR_CODES` (12), `ERROR_ALIASES`, `CONTRACT1_CODES` (the family's `EVENTS_*` names), `canonicalCode`, `SourceError`, `parseSourceError`. Conformance option `codes`. | done; D3 |
 | `events_list` input `scope?` | refused as an unknown field | accepted only when the source declares `scopeKeys` (`parseEventsListInput(input, { scopeKeys })`), so a source that cannot narrow never silently reads more. Keys and values are checked, and the scope is canonicalised. Optional echo on the page (`scope`); conformance option `scopeEcho`. | done; D7 |
 | The draft's envelope: `plugin`, `asOf` | — | optional on the page | done; D1 |
-| `maxBytes` (64 KB default, up to 1 MB) | `MAX_PAGE_BYTES` = 900 000 | `MAX_BYTES`. `fitPage(events, limit, maxBytes)`, `resultProblems(result, limit, maxBytes)` and conformance option `maxBytes`. The default stays 900 000 so contract 1 is unchanged. | done; D10 |
+| `maxBytes` (64 KB default, up to 1 MB) | `MAX_PAGE_BYTES` = 900 000 | `MAX_BYTES`. `fitPage(events, limit, maxBytes)`, `resultProblems(result, limit, maxBytes)` and conformance option `maxBytes`. `MAX_PAGE_BYTES` is 65 536, the descriptor's default (D10, (b), adopted). | done |
 | The secret-pattern refusal (§3 `events`; the draft's conformance check 3) | — | `secretKinds`, Memory's `records/src/storable.js` at a70cda5, ported with types only. Used by `screenEvents`, and always checked by the conformance: an event that holds a secret belongs in `refused[]`. None of the nine fixtures trips it. | done; D14 |
 | `since: "-7d"`, `$me`, `pick` | — | not here: `params` (the app and Artifacts) resolves them before the call, so a source still receives an absolute `since` | out of scope |
 | `probe`, `snapshot_read`, `describe` | — | not in `events`. The probe and details checks are Memory's (`hooks`). | out of scope; D11 |
@@ -69,6 +69,32 @@ The fixture runner records this, and fails if it changes:
 - **Kept apart, on purpose:** `descriptor`'s `canonicalJson` and the cursor's canonical scope (the cursor must not pull
   zod into its bundle); `read`'s `EventsPage` type and `SourceEvent`/`EventsListResult` here (`read` returns the
   page as the plugin answered it); `permission`'s `Grant.scope` (lists only) and `Scope` here (a value or a list, D12).
+
+## Probe (source-contract#8, #4)
+
+`probe` is one tools-RPC method per plugin (`PROBE`), called per source, as `probe({ source?, account? })`
+(`parseProbeInput` refuses anything else). It answers `ProbeResult`:
+`{ source, account, owner: { id, label }, scopes?, cost?, trust: "untrusted" }` (`probeResult` builds it).
+
+- `owner.id` is what a host keys its cache on, and what `$me` resolves to.
+- `scopes` are the provider sign-in's scopes.
+- `cost` is what a billed source (X) charged for the probe, from its own price table.
+
+`probeResultProblems` refuses any other field, so a probe that returned content fails. It also requires
+`owner.label` (D8).
+
+This is stricter than the package's other probe checks today. The app's `read.probe` requires `account` and `owner.id`,
+but lets `owner.label` be absent and does not check `source` or `trust`. Memory's `probeProblems` also accepts
+`owner: null`. The family recommends, on #8, that both call `probeResultProblems`. A source that is not signed in
+should refuse with `NEEDS_SIGN_IN` rather than answer `owner: null`, and a local source names a synthetic owner
+(history: `os-user:<user>@<host>`). Which permission a probe runs under is the descriptor's to declare (Memory's schema, #4 point 3).
+
+## Extension kinds (D13, source-contract#15)
+
+An `x-<namespace>/<kind>` belongs to the source whose id starts with `<namespace>`: `x-jelly/routine-run` only for a
+`jelly.*` source. This is the rule Memory's schema applies to `reads` in #21 (which supersedes #18), calling `isEventKindIn` itself. `isEventKindIn(kind, namespace)` checks
+it, `sourceNamespace` gives a source id's namespace, and `eventsListConformance`'s `namespace` option applies it to
+every page. `isEventKind` alone still accepts any well-formed extension.
 
 ## Cursors: what the binding does and does not do
 
@@ -113,12 +139,13 @@ The fixture runner records this, and fails if it changes:
 - **D10. The default page cap.** A descriptor's `maxBytes` defaults to 64 KB and the host caps answers at it, but
   contract 1's cap is 900 000. Plugins must pass their declared `maxBytes` to `fitPage`. Should the library's default
   become 64 KB in v1? That breaks no recorded page, but it changes contract 1's constant.
+  **Decided: (b)**, adopted by the app on #7; `MAX_PAGE_BYTES` is 65 536.
 - **D11. Identity.** The final design's `probe` method, or Memory's contract 2 owner-only `events_list({ limit: 0 })`?
   Contract 1 refuses `limit: 0`, and its conformance checks that refusal. The package keeps that, pending this
   decision.
 - **D12. Scope canonical form.** Keys are sorted, and each list is sorted and deduplicated. A string and a one-item
   list stay different. Agreed?
-- **D13. Extension kinds.** At most 64 characters. The `<plugin>` word is not checked against the plugin's id. Should
+- **D13. Extension kinds.** Each segment at most 32 characters (`EXTENSION_NAME`, the one rule for kinds and outputs; it was 64 for the whole kind). The `<plugin>` word is not checked against the plugin's id. Should
   the conformance check it against the descriptor?
 - **D14. Who owns `src/internal/secrets.ts`.** It is Memory's code in a family-owned module. *Proposal:* both CODEOWNERS, with the
   same test vectors on both sides.

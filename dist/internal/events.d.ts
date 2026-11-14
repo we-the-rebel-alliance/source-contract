@@ -10,10 +10,30 @@ export type CoreKind = (typeof EVENT_KINDS)[number];
 /** A plugin's own kind: `x-<plugin>/<kind>`, such as `x-jelly/routine-run`. */
 export type ExtensionKind = `x-${string}/${string}`;
 export type EventKind = CoreKind | ExtensionKind;
-/** An extension kind: `x-`, a lowercase plugin word, `/`, a lowercase kind word; at most 64 characters. */
+/** The most characters each segment of an `x-<namespace>/<name>` takes: the namespace, and the name. */
+export declare const EXTENSION_SEGMENT_MAX = 32;
+/**
+ * The one rule for an extension name, an event kind (`x-jelly/routine-run`) or a snapshot output (`x-mem/receipt`):
+ * `x-`, a lowercase namespace word, `/`, a lowercase name word, each of 1 to `EXTENSION_SEGMENT_MAX` characters.
+ * Memory's schema and the registry use this pattern rather than their own (source-contract#21).
+ */
+export declare const EXTENSION_NAME: RegExp;
+/** An extension kind: `EXTENSION_NAME`, the one rule for kinds and outputs. */
 export declare const EXTENSION_KIND: RegExp;
-/** True for a core kind, or an extension kind of at most 64 characters. */
+/** True for an extension name, a kind or an output, by `EXTENSION_NAME`. */
+export declare const isExtensionName: (name: unknown) => name is ExtensionKind;
+/** True for a core kind, or an extension kind (`EXTENSION_NAME`). */
 export declare const isEventKind: (kind: unknown) => kind is EventKind;
+/** An extension kind's namespace: `jelly` in `x-jelly/routine-run`; undefined for a core kind or a malformed one. */
+export declare function extensionNamespace(kind: string): string | undefined;
+/**
+ * True for a core kind, or an extension kind in `namespace`: the first segment of the source's id (`jelly` for
+ * `jelly.routine-runs`), as Memory's schema checks a descriptor's `reads` (decision D13, (b)). An extension kind of
+ * another namespace is refused, so one plugin cannot speak in another's vocabulary.
+ */
+export declare function isEventKindIn(kind: unknown, namespace: string): kind is EventKind;
+/** The namespace of a source id: its first dotted segment (`gws` in `gws.gmail`). */
+export declare const sourceNamespace: (sourceId: string) => string;
 /** The most characters each field takes, and the most items each list takes. */
 export declare const EVENT_LIMITS: {
     readonly source: 64;
@@ -48,10 +68,11 @@ export declare const PAGE: {
     readonly max: 500;
 };
 /**
- * The most bytes of JSON one result holds when the source declares no `maxBytes`. Contract 1's cap. The descriptor's
- * `maxBytes` (64 KB by default, at most 1 MB) is the cap a host enforces, and `fitPage` and the conformance take it.
+ * The most bytes of JSON one result holds when the source declares no `maxBytes`: 64 KB, the descriptor's default
+ * `maxBytes` and the host's RPC cap (decision D10, (b); contract 1's cap was 900 000). A source that declares a larger
+ * `maxBytes` (at most 1 MB) passes it to `fitPage`, and the conformance takes it.
  */
-export declare const MAX_PAGE_BYTES = 900000;
+export declare const MAX_PAGE_BYTES = 65536;
 /** The descriptor's `maxBytes`: its default and its ceiling (design §2.2). */
 export declare const MAX_BYTES: {
     readonly default: 65536;
@@ -287,6 +308,54 @@ export declare function screenEvents(events: readonly SourceEvent[], options?: S
     events: SourceEvent[];
     refused: RefusedEvent[];
 };
+/** The tools-RPC method and tool every source plugin names `probe`: one per plugin, called per source. */
+export declare const PROBE = "probe";
+/** `probe`'s input: the source (the plugin's first without it) and the account (its default without it). Nothing else. */
+export interface ProbeInput {
+    readonly source?: string;
+    readonly account?: string;
+}
+/** The provider sign-in scopes a probe may list: at most this many, each at most this long. */
+export declare const PROBE_LIMITS: {
+    readonly scopes: 64;
+    readonly scope: 256;
+};
+/**
+ * What `probe` answers: whose the source is and what its sign-in holds, and nothing it reads. `owner.id` is the id a
+ * host keys its cache on and `$me` resolves to. `scopes` are the provider sign-in's scopes, so a Calendar-only sign-in
+ * can be told apart. `cost` is what the provider charged for the probe, for a billed source such as X (its own price
+ * table, per §2.2 `cost.probe`). `trust` is "untrusted", as on every result.
+ */
+export interface ProbeResult {
+    readonly source: string;
+    readonly account: string;
+    readonly owner: EventsOwner;
+    readonly scopes?: string[];
+    readonly cost?: EventsCost;
+    readonly trust: typeof TRUST;
+}
+/** `probe`'s input checked, or its problems, naming fields and never values. Anything but source and account is refused. */
+export declare function parseProbeInput(input: unknown): {
+    ok: true;
+    value: ProbeInput;
+} | {
+    ok: false;
+    problems: string[];
+};
+/** A probe answer for `identity`, with the sign-in's scopes and the probe's cost when given. */
+export declare function probeResult(identity: EventsListIdentity, extras?: {
+    readonly scopes?: readonly string[];
+    readonly cost?: EventsCost;
+}): ProbeResult;
+/**
+ * A probe answer's problems, one sentence each; none when it keeps the contract. Its keys are exactly
+ * `source, account, owner, scopes?, cost?, trust`, so a probe that returned content (events, data, text) fails. With
+ * `expected`, the source and the account must be the ones asked for.
+ */
+export declare function probeResultProblems(result: unknown, expected?: {
+    readonly source?: string;
+    readonly account?: string;
+}): string[];
 /** Whose a result is: the source and account it lists, and the signed-in owner of that account. */
 export interface EventsListIdentity {
     readonly source: string;

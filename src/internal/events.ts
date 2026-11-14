@@ -60,12 +60,44 @@ export type CoreKind = (typeof EVENT_KINDS)[number]
 export type ExtensionKind = `x-${string}/${string}`
 export type EventKind = CoreKind | ExtensionKind
 
-/** An extension kind: `x-`, a lowercase plugin word, `/`, a lowercase kind word; at most 64 characters. */
-export const EXTENSION_KIND = /^x-[a-z][a-z0-9-]*\/[a-z][a-z0-9-]*$/
+/** The most characters each segment of an `x-<namespace>/<name>` takes: the namespace, and the name. */
+export const EXTENSION_SEGMENT_MAX = 32
 
-/** True for a core kind, or an extension kind of at most 64 characters. */
+/**
+ * The one rule for an extension name, an event kind (`x-jelly/routine-run`) or a snapshot output (`x-mem/receipt`):
+ * `x-`, a lowercase namespace word, `/`, a lowercase name word, each of 1 to `EXTENSION_SEGMENT_MAX` characters.
+ * Memory's schema and the registry use this pattern rather than their own (source-contract#21).
+ */
+export const EXTENSION_NAME = new RegExp(`^x-[a-z][a-z0-9-]{0,${EXTENSION_SEGMENT_MAX - 1}}/[a-z][a-z0-9-]{0,${EXTENSION_SEGMENT_MAX - 1}}$`)
+
+/** An extension kind: `EXTENSION_NAME`, the one rule for kinds and outputs. */
+export const EXTENSION_KIND = EXTENSION_NAME
+
+/** True for an extension name, a kind or an output, by `EXTENSION_NAME`. */
+export const isExtensionName = (name: unknown): name is ExtensionKind => typeof name === "string" && EXTENSION_NAME.test(name)
+
+/** True for a core kind, or an extension kind (`EXTENSION_NAME`). */
 export const isEventKind = (kind: unknown): kind is EventKind =>
-  typeof kind === "string" && ((EVENT_KINDS as readonly string[]).includes(kind) || (kind.length <= 64 && EXTENSION_KIND.test(kind)))
+  typeof kind === "string" && ((EVENT_KINDS as readonly string[]).includes(kind) || isExtensionName(kind))
+
+/** An extension kind's namespace: `jelly` in `x-jelly/routine-run`; undefined for a core kind or a malformed one. */
+export function extensionNamespace(kind: string): string | undefined {
+  return isEventKind(kind) && kind.startsWith("x-") ? kind.slice(2, kind.indexOf("/")) : undefined
+}
+
+/**
+ * True for a core kind, or an extension kind in `namespace`: the first segment of the source's id (`jelly` for
+ * `jelly.routine-runs`), as Memory's schema checks a descriptor's `reads` (decision D13, (b)). An extension kind of
+ * another namespace is refused, so one plugin cannot speak in another's vocabulary.
+ */
+export function isEventKindIn(kind: unknown, namespace: string): kind is EventKind {
+  if (!isEventKind(kind)) return false
+  const own = extensionNamespace(kind)
+  return own === undefined || own === namespace
+}
+
+/** The namespace of a source id: its first dotted segment (`gws` in `gws.gmail`). */
+export const sourceNamespace = (sourceId: string): string => sourceId.split(".", 1)[0] ?? sourceId
 
 /** The most characters each field takes, and the most items each list takes. */
 export const EVENT_LIMITS = {
@@ -99,10 +131,11 @@ export const EVENT_LIMITS = {
 export const PAGE = { default: 100, min: 1, max: 500 } as const
 
 /**
- * The most bytes of JSON one result holds when the source declares no `maxBytes`. Contract 1's cap. The descriptor's
- * `maxBytes` (64 KB by default, at most 1 MB) is the cap a host enforces, and `fitPage` and the conformance take it.
+ * The most bytes of JSON one result holds when the source declares no `maxBytes`: 64 KB, the descriptor's default
+ * `maxBytes` and the host's RPC cap (decision D10, (b); contract 1's cap was 900 000). A source that declares a larger
+ * `maxBytes` (at most 1 MB) passes it to `fitPage`, and the conformance takes it.
  */
-export const MAX_PAGE_BYTES = 900_000
+export const MAX_PAGE_BYTES = 65_536
 
 /** The descriptor's `maxBytes`: its default and its ceiling (design §2.2). */
 export const MAX_BYTES = { default: 65_536, max: 1_048_576 } as const
@@ -552,6 +585,91 @@ export function screenEvents(events: readonly SourceEvent[], options: ScreenOpti
     kept.push(event)
   }
   return { events: kept, refused }
+}
+
+// ── Probe (design §2.3; source-contract#8 and #4) ───────────────────────────
+
+/** The tools-RPC method and tool every source plugin names `probe`: one per plugin, called per source. */
+export const PROBE = "probe"
+
+/** `probe`'s input: the source (the plugin's first without it) and the account (its default without it). Nothing else. */
+export interface ProbeInput {
+  readonly source?: string
+  readonly account?: string
+}
+
+/** The provider sign-in scopes a probe may list: at most this many, each at most this long. */
+export const PROBE_LIMITS = { scopes: 64, scope: 256 } as const
+
+/**
+ * What `probe` answers: whose the source is and what its sign-in holds, and nothing it reads. `owner.id` is the id a
+ * host keys its cache on and `$me` resolves to. `scopes` are the provider sign-in's scopes, so a Calendar-only sign-in
+ * can be told apart. `cost` is what the provider charged for the probe, for a billed source such as X (its own price
+ * table, per §2.2 `cost.probe`). `trust` is "untrusted", as on every result.
+ */
+export interface ProbeResult {
+  readonly source: string
+  readonly account: string
+  readonly owner: EventsOwner
+  readonly scopes?: string[]
+  readonly cost?: EventsCost
+  readonly trust: typeof TRUST
+}
+
+/** `probe`'s input checked, or its problems, naming fields and never values. Anything but source and account is refused. */
+export function parseProbeInput(input: unknown): { ok: true; value: ProbeInput } | { ok: false; problems: string[] } {
+  const value = input === undefined || input === null ? {} : input
+  if (!plainObject(value)) return { ok: false, problems: ["the input must be an object"] }
+  const problems = Object.keys(value).filter((key) => key !== "source" && key !== "account").map((key) => `"${key}" is not an input of probe`)
+  const { source, account } = value
+  if (source !== undefined && (typeof source !== "string" || source.length > EVENT_LIMITS.source || !SOURCE_PATTERN.test(source))) {
+    problems.push(`"source" must be a source's name, a lowercase word such as gmail`)
+  }
+  if (account !== undefined && (typeof account !== "string" || account.length === 0 || account.length > EVENT_LIMITS.account || hasControl(account))) {
+    problems.push(`"account" must be a non-empty account name of at most ${EVENT_LIMITS.account} characters`)
+  }
+  if (problems.length > 0) return { ok: false, problems }
+  return { ok: true, value: { ...(source === undefined ? {} : { source: source as string }), ...(account === undefined ? {} : { account: account as string }) } }
+}
+
+/** A probe answer for `identity`, with the sign-in's scopes and the probe's cost when given. */
+export function probeResult(identity: EventsListIdentity, extras: { readonly scopes?: readonly string[]; readonly cost?: EventsCost } = {}): ProbeResult {
+  return {
+    source: identity.source,
+    account: identity.account,
+    owner: { id: identity.owner.id, label: identity.owner.label },
+    ...(extras.scopes === undefined ? {} : { scopes: [...new Set(extras.scopes)] }),
+    ...(extras.cost === undefined ? {} : { cost: extras.cost }),
+    trust: TRUST,
+  }
+}
+
+const PROBE_KEYS: readonly string[] = ["source", "account", "owner", "scopes", "cost", "trust"]
+
+/**
+ * A probe answer's problems, one sentence each; none when it keeps the contract. Its keys are exactly
+ * `source, account, owner, scopes?, cost?, trust`, so a probe that returned content (events, data, text) fails. With
+ * `expected`, the source and the account must be the ones asked for.
+ */
+export function probeResultProblems(result: unknown, expected: { readonly source?: string; readonly account?: string } = {}): string[] {
+  if (!plainObject(result)) return ["the probe answer is not an object"]
+  const problems: string[] = []
+  for (const key of Object.keys(result)) if (!PROBE_KEYS.includes(key)) problems.push(`the probe answer has the field "${key}": a probe reads no content, and the contract defines no such field`)
+  if (!line(result["source"], EVENT_LIMITS.source) || !SOURCE_PATTERN.test(result["source"])) problems.push("the probe answer's source must be a lowercase name such as gmail")
+  else if (expected.source !== undefined && result["source"] !== expected.source) problems.push(`the probe answer names the source ${result["source"]}, not ${expected.source}`)
+  if (!line(result["account"], EVENT_LIMITS.account)) problems.push(`the probe answer's account must be a non-empty name of at most ${EVENT_LIMITS.account} characters`)
+  else if (expected.account !== undefined && result["account"] !== expected.account) problems.push("the probe answer names another account than the one asked for")
+  const owner = result["owner"]
+  if (!plainObject(owner) || !line(owner["id"], EVENT_LIMITS.ownerId) || !line(owner["label"], EVENT_LIMITS.ownerLabel) || Object.keys(owner).some((key) => key !== "id" && key !== "label")) {
+    problems.push("the probe answer's owner must be { id, label }, two non-empty lines")
+  }
+  const scopes = result["scopes"]
+  if (scopes !== undefined && (!Array.isArray(scopes) || scopes.length > PROBE_LIMITS.scopes || scopes.some((scope) => !line(scope, PROBE_LIMITS.scope)) || new Set(scopes).size !== scopes.length)) {
+    problems.push(`the probe answer's scopes must be at most ${PROBE_LIMITS.scopes} different lines of at most ${PROBE_LIMITS.scope} characters`)
+  }
+  if (result["cost"] !== undefined) problems.push(...extraProblems({ cost: result["cost"] }, new Set()).map((problem) => problem.replace("the result's cost", "the probe answer's cost")))
+  if (result["trust"] !== TRUST) problems.push(`the probe answer's trust must be "${TRUST}"`)
+  return problems
 }
 
 // ── Results ───────────────────────────────────────────────────────────────

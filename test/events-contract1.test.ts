@@ -150,7 +150,8 @@ describe("events", () => {
     expect(oldestFirst([event(3), event(1), event(2, { external_id: "tie" }), event(2)]).map(e => e.external_id)).toEqual(["item-1", "tie", "item-2", "item-3"])
     const big = Array.from({ length: 400 }, (_, index) => event(index, { text: "y".repeat(4_096) }))
     const fits = fitPage(big, 500)
-    expect(fits).toBeGreaterThan(100)
+    // D10: the default cap is 64 KB (contract 1's was 900 000, where this suite expected more than 100 such events).
+    expect(fits).toBeGreaterThan(5)
     expect(fits).toBeLessThan(400)
     expect(Buffer.byteLength(JSON.stringify(eventsListResult(WHOSE, big.slice(0, fits), "c", true)))).toBeLessThanOrEqual(MAX_PAGE_BYTES)
     expect(fitPage(big, 3)).toBe(3)

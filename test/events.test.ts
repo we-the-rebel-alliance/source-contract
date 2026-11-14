@@ -10,9 +10,22 @@ import {
   eventsListConformance,
   eventsListResult,
   fitPage,
+  EXTENSION_KIND,
+  EXTENSION_NAME,
+  EXTENSION_SEGMENT_MAX,
+  extensionNamespace,
+  isExtensionName,
   isEventKind,
+  isEventKindIn,
+  sourceNamespace,
   makeEvent,
+  MAX_BYTES,
+  MAX_PAGE_BYTES,
   parseEventsListInput,
+  parseProbeInput,
+  PROBE,
+  probeResult,
+  probeResultProblems,
   parseSourceError,
   resultProblems,
   screenEvents,
@@ -39,6 +52,86 @@ describe("kinds", () => {
     }
     for (const kind of ["tweet", "x-/a", "x-jelly", "x-Jelly/run", "x-jelly/Run", `x-jelly/${"a".repeat(60)}`]) expect(isEventKind(kind), kind).toBe(false)
   })
+
+  test("one length rule for kinds and outputs: each segment 1 to 32 characters (source-contract#21)", () => {
+    const max = "a".repeat(EXTENSION_SEGMENT_MAX)
+    expect(EXTENSION_SEGMENT_MAX).toBe(32)
+    expect(isEventKind(`x-${max}/${max}`)).toBe(true)
+    expect(isExtensionName(`x-${max}/${max}`)).toBe(true)
+    expect(isEventKind(`x-${max}a/run`)).toBe(false)
+    expect(isEventKind(`x-jelly/${max}a`)).toBe(false)
+    expect(isExtensionName("x-mem/receipt")).toBe(true)
+    expect(isExtensionName("message")).toBe(false)
+    expect(EXTENSION_KIND).toBe(EXTENSION_NAME)
+  })
+})
+
+describe("extension kinds and their namespace (D13, source-contract#15)", () => {
+  test("x-jelly/routine-run is a kind, in jelly's namespace and no other", () => {
+    expect(isEventKind("x-jelly/routine-run")).toBe(true)
+    expect(extensionNamespace("x-jelly/routine-run")).toBe("jelly")
+    expect(extensionNamespace("meeting")).toBeUndefined()
+    expect(extensionNamespace("x-jelly")).toBeUndefined()
+    expect(sourceNamespace("jelly.routine-runs")).toBe("jelly")
+    expect(sourceNamespace("gws.gmail")).toBe("gws")
+    expect(isEventKindIn("x-jelly/routine-run", sourceNamespace("jelly.routine-runs"))).toBe(true)
+    expect(isEventKindIn("meeting", "jelly")).toBe(true)
+    expect(isEventKindIn("x-mem/suggestion", "jelly")).toBe(false)
+    expect(isEventKindIn("x-jelly/Run", "jelly")).toBe(false)
+  })
+
+  test("the conformance refuses an x- kind outside the source's namespace, when told the namespace", async () => {
+    const items = [event(0, { kind: "x-jelly/routine-run" }), event(1)]
+    const list = async (input: EventsListInput) => {
+      const parsed = parseEventsListInput(input)
+      if (!parsed.ok) throw new SourceError({ code: "INPUT_INVALID", what: parsed.problems.join("; "), next: "Fix it." })
+      if (parsed.value.source !== undefined && parsed.value.source !== "demo") throw new SourceError({ code: "SOURCE_UNKNOWN", what: "no", next: "Pass demo." })
+      if (parsed.value.cursor !== undefined) {
+        const decoded = decodeBoundCursor({ plugin: "jelly", source: "demo", account: "work" }, parsed.value.cursor)
+        if (!decoded.ok) throw new SourceError({ code: "CURSOR_INVALID", what: "no", next: "Start again." })
+        const n = decoded.state["n"] as number
+        const page = items.slice(n, n + parsed.value.limit)
+        return eventsListResult(WHOSE, page, encodeBoundCursor({ plugin: "jelly", source: "demo", account: "work" }, { n: n + page.length }), n + page.length < items.length)
+      }
+      const from = parsed.value.since !== undefined && parsed.value.since > T0 + 3_600_000 ? items.length : 0
+      const page = items.slice(from, from + parsed.value.limit)
+      return eventsListResult(WHOSE, page, encodeBoundCursor({ plugin: "jelly", source: "demo", account: "work" }, { n: from + page.length }), from + page.length < items.length)
+    }
+    const fixtures = { source: "demo", account: "work", since: "2026-11-01T08:00:00Z", expected: ["item-0", "item-1"] }
+    expect(await eventsListConformance(list, { ...fixtures, namespace: "jelly" })).toEqual([])
+    expect(await eventsListConformance(list, fixtures)).toEqual([])
+    expect(await eventsListConformance(list, { ...fixtures, namespace: "mem" })).toContainEqual(expect.stringContaining("is a x-jelly/routine-run, outside the namespace mem"))
+  })
+})
+
+describe("probe (source-contract#8, #4)", () => {
+  test("is one method, probe, taking only source and account", () => {
+    expect(PROBE).toBe("probe")
+    expect(parseProbeInput({})).toEqual({ ok: true, value: {} })
+    expect(parseProbeInput(undefined)).toEqual({ ok: true, value: {} })
+    expect(parseProbeInput({ source: "gmail", account: "work" })).toEqual({ ok: true, value: { source: "gmail", account: "work" } })
+    expect(parseProbeInput({ source: "gmail", limit: 0 })).toEqual({ ok: false, problems: ['"limit" is not an input of probe'] })
+    expect((parseProbeInput({ source: "Gmail", account: "" }) as { problems: string[] }).problems).toHaveLength(2)
+  })
+
+  test("answers source, account, owner { id, label }, the sign-in's scopes and X's probe cost, untrusted", () => {
+    const answer = probeResult(WHOSE, { scopes: ["gmail.readonly", "gmail.readonly"], cost: { units: [{ per: "call", count: 1 }], usd: 0.01 } })
+    expect(answer).toEqual({ source: "demo", account: "work", owner: OWNER, scopes: ["gmail.readonly"], cost: { units: [{ per: "call", count: 1 }], usd: 0.01 }, trust: "untrusted" })
+    expect(probeResultProblems(answer, { source: "demo", account: "work" })).toEqual([])
+    expect(probeResultProblems(probeResult(WHOSE))).toEqual([])
+  })
+
+  test("finds a probe that read content, has no owner label, or answers for another source or account", () => {
+    const answer = probeResult(WHOSE)
+    expect(probeResultProblems({ ...answer, events: [] })).toEqual([expect.stringContaining('the field "events": a probe reads no content')])
+    expect(probeResultProblems({ ...answer, owner: { id: OWNER.id } })).toEqual(["the probe answer's owner must be { id, label }, two non-empty lines"])
+    expect(probeResultProblems({ ...answer, owner: null })).toHaveLength(1)
+    expect(probeResultProblems(answer, { source: "gmail" })).toEqual(["the probe answer names the source demo, not gmail"])
+    expect(probeResultProblems(answer, { account: "home" })).toEqual(["the probe answer names another account than the one asked for"])
+    expect(probeResultProblems({ ...answer, trust: "trusted" })).toEqual([expect.stringContaining("trust")])
+    expect(probeResultProblems({ ...answer, scopes: ["a", "a"] })).toEqual([expect.stringContaining("scopes")])
+    expect(probeResultProblems({ ...answer, cost: { units: [{ per: "call", count: -1 }] } })).toEqual([expect.stringContaining("the probe answer's cost")])
+  })
 })
 
 describe("scope input", () => {
@@ -54,6 +147,13 @@ describe("scope input", () => {
     expect((parse({ label: "x\ny" }) as { problems: string[] }).problems).toHaveLength(1)
     expect((parse("INBOX") as { problems: string[] }).problems).toEqual(['"scope" must be an object of the source\'s scope keys'])
     expect(JSON.stringify(parse({ label: "secret-label\u0000" }))).not.toContain("secret-label")
+  })
+})
+
+describe("the default page cap (D10)", () => {
+  test("is the descriptor's default maxBytes, 64 KB", () => {
+    expect(MAX_PAGE_BYTES).toBe(MAX_BYTES.default)
+    expect(MAX_PAGE_BYTES).toBe(65_536)
   })
 })
 

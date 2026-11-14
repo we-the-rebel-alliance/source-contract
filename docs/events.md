@@ -81,12 +81,18 @@ The fixture runner records this, and fails if it changes:
 - `cost` is what a billed source (X) charged for the probe, from its own price table.
 
 `probeResultProblems` refuses any other field, so a probe that returned content fails. It also requires
-`owner.label` (D8). Which permission a probe runs under is the descriptor's to declare (Memory's schema, #4 point 3).
+`owner.label` (D8).
+
+This is stricter than the package's other probe checks today. The app's `read.probe` requires `account` and `owner.id`,
+but lets `owner.label` be absent and does not check `source` or `trust`. Memory's `probeProblems` also accepts
+`owner: null`. The family recommends, on #8, that both call `probeResultProblems`. A source that is not signed in
+should refuse with `NEEDS_SIGN_IN` rather than answer `owner: null`, and a local source names a synthetic owner
+(history: `os-user:<user>@<host>`). Which permission a probe runs under is the descriptor's to declare (Memory's schema, #4 point 3).
 
 ## Extension kinds (D13, source-contract#15)
 
 An `x-<namespace>/<kind>` belongs to the source whose id starts with `<namespace>`: `x-jelly/routine-run` only for a
-`jelly.*` source. This is the rule Memory's schema applies to `reads` in #18. `isEventKindIn(kind, namespace)` checks
+`jelly.*` source. This is the rule Memory's schema applies to `reads` in #21 (which supersedes #18), calling `isEventKindIn` itself. `isEventKindIn(kind, namespace)` checks
 it, `sourceNamespace` gives a source id's namespace, and `eventsListConformance`'s `namespace` option applies it to
 every page. `isEventKind` alone still accepts any well-formed extension.
 

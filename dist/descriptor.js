@@ -10,7 +10,7 @@ import {
   findSource,
   maxBytesOf,
   readInstalledDescriptor
-} from "./chunks/chunk-LABOC2SS.js";
+} from "./chunks/chunk-TIOIEYHX.js";
 import "./chunks/chunk-AXAGCSNI.js";
 import "./chunks/chunk-ELPJD3ND.js";
 import "./chunks/chunk-WJ4C2MR4.js";

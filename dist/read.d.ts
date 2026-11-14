@@ -34,6 +34,8 @@ export interface ReadHost {
      */
     call(request: {
         readonly package: string;
+        /** The plugin's declared tools-RPC id (`sources.rpc`), when it declares one; the host checks the package owns it. */
+        readonly rpc?: string;
         readonly method: string;
         readonly sessionID: string;
         readonly input: Readonly<Record<string, unknown>>;
@@ -157,14 +159,16 @@ export interface ProbeAnswer {
     readonly scopes?: readonly string[];
 }
 /**
- * Probes a source for an account, in a session fenced by its probe rules: the source's own action and the identity
- * operations the caller names (the descriptor does not list them yet; source-contract#4).
+ * Probes a source for an account, in a session fenced by its probe rules: the plugin's declared probe action
+ * (`sources.probe.action`) and the source's declared identity operations (`permission.identity`), or, for a plugin
+ * that declares neither yet, the source's own action and the identity operations the caller passes. The call is the
+ * family's: `probe` with `{ source?, account }`.
  */
 export declare function probe(host: ReadHost, request: {
     readonly installed: InstalledDescriptor;
     readonly source: string;
     readonly account: string;
-    readonly identityOperations: readonly string[];
+    readonly identityOperations?: readonly string[];
     readonly signal?: AbortSignal;
 }): Promise<{
     readonly ok: true;

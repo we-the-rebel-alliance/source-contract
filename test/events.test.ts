@@ -10,7 +10,11 @@ import {
   eventsListConformance,
   eventsListResult,
   fitPage,
+  EXTENSION_KIND,
+  EXTENSION_NAME,
+  EXTENSION_SEGMENT_MAX,
   extensionNamespace,
+  isExtensionName,
   isEventKind,
   isEventKindIn,
   sourceNamespace,
@@ -47,6 +51,18 @@ describe("kinds", () => {
       expect(eventProblems(event(1, { kind: kind as never })), kind).toEqual([])
     }
     for (const kind of ["tweet", "x-/a", "x-jelly", "x-Jelly/run", "x-jelly/Run", `x-jelly/${"a".repeat(60)}`]) expect(isEventKind(kind), kind).toBe(false)
+  })
+
+  test("one length rule for kinds and outputs: each segment 1 to 32 characters (source-contract#21)", () => {
+    const max = "a".repeat(EXTENSION_SEGMENT_MAX)
+    expect(EXTENSION_SEGMENT_MAX).toBe(32)
+    expect(isEventKind(`x-${max}/${max}`)).toBe(true)
+    expect(isExtensionName(`x-${max}/${max}`)).toBe(true)
+    expect(isEventKind(`x-${max}a/run`)).toBe(false)
+    expect(isEventKind(`x-jelly/${max}a`)).toBe(false)
+    expect(isExtensionName("x-mem/receipt")).toBe(true)
+    expect(isExtensionName("message")).toBe(false)
+    expect(EXTENSION_KIND).toBe(EXTENSION_NAME)
   })
 })
 

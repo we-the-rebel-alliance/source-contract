@@ -139,7 +139,7 @@ every page. `isEventKind` alone still accepts any well-formed extension.
   decision.
 - **D12. Scope canonical form.** Keys are sorted, and each list is sorted and deduplicated. A string and a one-item
   list stay different. Agreed?
-- **D13. Extension kinds.** At most 64 characters. The `<plugin>` word is not checked against the plugin's id. Should
+- **D13. Extension kinds.** Each segment at most 32 characters (`EXTENSION_NAME`, the one rule for kinds and outputs; it was 64 for the whole kind). The `<plugin>` word is not checked against the plugin's id. Should
   the conformance check it against the descriptor?
 - **D14. Who owns `src/internal/secrets.ts`.** It is Memory's code in a family-owned module. *Proposal:* both CODEOWNERS, with the
   same test vectors on both sides.

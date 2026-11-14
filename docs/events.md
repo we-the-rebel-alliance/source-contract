@@ -35,7 +35,7 @@ copy's import path. `src/events.ts` is the entry; the code is under `src/interna
 | Errors: the draft's table + `SCOPE_MISSING`, `BUDGET_EXCEEDED`, `SOURCE_DISABLED`; `AUTH_REQUIRED` aliases `NEEDS_SIGN_IN`; the message is `CODE: what happened. Next step: …` | each plugin's own codes | `ERROR_CODES` (12), `ERROR_ALIASES`, `CONTRACT1_CODES` (the family's `EVENTS_*` names), `canonicalCode`, `SourceError`, `parseSourceError`. Conformance option `codes`. | done; D3 |
 | `events_list` input `scope?` | refused as an unknown field | accepted only when the source declares `scopeKeys` (`parseEventsListInput(input, { scopeKeys })`), so a source that cannot narrow never silently reads more. Keys and values are checked, and the scope is canonicalised. Optional echo on the page (`scope`); conformance option `scopeEcho`. | done; D7 |
 | The draft's envelope: `plugin`, `asOf` | — | optional on the page | done; D1 |
-| `maxBytes` (64 KB default, up to 1 MB) | `MAX_PAGE_BYTES` = 900 000 | `MAX_BYTES`. `fitPage(events, limit, maxBytes)`, `resultProblems(result, limit, maxBytes)` and conformance option `maxBytes`. The default stays 900 000 so contract 1 is unchanged. | done; D10 |
+| `maxBytes` (64 KB default, up to 1 MB) | `MAX_PAGE_BYTES` = 900 000 | `MAX_BYTES`. `fitPage(events, limit, maxBytes)`, `resultProblems(result, limit, maxBytes)` and conformance option `maxBytes`. `MAX_PAGE_BYTES` is 65 536, the descriptor's default (D10, (b), adopted). | done |
 | The secret-pattern refusal (§3 `events`; the draft's conformance check 3) | — | `secretKinds`, Memory's `records/src/storable.js` at a70cda5, ported with types only. Used by `screenEvents`, and always checked by the conformance: an event that holds a secret belongs in `refused[]`. None of the nine fixtures trips it. | done; D14 |
 | `since: "-7d"`, `$me`, `pick` | — | not here: `params` (the app and Artifacts) resolves them before the call, so a source still receives an absolute `since` | out of scope |
 | `probe`, `snapshot_read`, `describe` | — | not in `events`. The probe and details checks are Memory's (`hooks`). | out of scope; D11 |
@@ -133,6 +133,7 @@ every page. `isEventKind` alone still accepts any well-formed extension.
 - **D10. The default page cap.** A descriptor's `maxBytes` defaults to 64 KB and the host caps answers at it, but
   contract 1's cap is 900 000. Plugins must pass their declared `maxBytes` to `fitPage`. Should the library's default
   become 64 KB in v1? That breaks no recorded page, but it changes contract 1's constant.
+  **Decided: (b)**, adopted by the app on #7; `MAX_PAGE_BYTES` is 65 536.
 - **D11. Identity.** The final design's `probe` method, or Memory's contract 2 owner-only `events_list({ limit: 0 })`?
   Contract 1 refuses `limit: 0`, and its conformance checks that refusal. The package keeps that, pending this
   decision.

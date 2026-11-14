@@ -118,10 +118,11 @@ export const EVENT_LIMITS = {
 export const PAGE = { default: 100, min: 1, max: 500 } as const
 
 /**
- * The most bytes of JSON one result holds when the source declares no `maxBytes`. Contract 1's cap. The descriptor's
- * `maxBytes` (64 KB by default, at most 1 MB) is the cap a host enforces, and `fitPage` and the conformance take it.
+ * The most bytes of JSON one result holds when the source declares no `maxBytes`: 64 KB, the descriptor's default
+ * `maxBytes` and the host's RPC cap (decision D10, (b); contract 1's cap was 900 000). A source that declares a larger
+ * `maxBytes` (at most 1 MB) passes it to `fitPage`, and the conformance takes it.
  */
-export const MAX_PAGE_BYTES = 900_000
+export const MAX_PAGE_BYTES = 65_536
 
 /** The descriptor's `maxBytes`: its default and its ceiling (design §2.2). */
 export const MAX_BYTES = { default: 65_536, max: 1_048_576 } as const

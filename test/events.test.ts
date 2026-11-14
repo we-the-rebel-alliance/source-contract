@@ -15,6 +15,8 @@ import {
   isEventKindIn,
   sourceNamespace,
   makeEvent,
+  MAX_BYTES,
+  MAX_PAGE_BYTES,
   parseEventsListInput,
   parseProbeInput,
   PROBE,
@@ -129,6 +131,13 @@ describe("scope input", () => {
     expect((parse({ label: "x\ny" }) as { problems: string[] }).problems).toHaveLength(1)
     expect((parse("INBOX") as { problems: string[] }).problems).toEqual(['"scope" must be an object of the source\'s scope keys'])
     expect(JSON.stringify(parse({ label: "secret-label\u0000" }))).not.toContain("secret-label")
+  })
+})
+
+describe("the default page cap (D10)", () => {
+  test("is the descriptor's default maxBytes, 64 KB", () => {
+    expect(MAX_PAGE_BYTES).toBe(MAX_BYTES.default)
+    expect(MAX_PAGE_BYTES).toBe(65_536)
   })
 })
 

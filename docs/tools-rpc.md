@@ -44,6 +44,16 @@ pass on `node --test` and `bun test`. `test/tools-rpc-resource.test.ts` (13 test
 Without a resolver nothing changes: no method in the 24 plugins has one today, so adopting the package changes no
 behaviour until a plugin adds a resolver.
 
+## The tools-RPC id (source-contract#4)
+
+A plugin's tools RPC is `<plugin id>.tools` (`toolsRpcId`), where the plugin id is OpenCode's: lowercase dotted
+words, such as `google-workspace.gws`. This is not the descriptor's source-id prefix (`gws`). `registerToolsRpc`
+refuses any other shape.
+
+A descriptor that names the id lets a consumer call the plugin without guessing. `toolsRpcIdProblems(declared,
+describe?)` checks the declared id, and compares it with the plugin's `describe` answer when the consumer has one.
+That comparison is diagnostic only: RPC ids have no owner in OpenCode.
+
 ## Differences from Memory's v2.3
 
 **Memory's file could not be read.** Memory's README names its canonical copy as

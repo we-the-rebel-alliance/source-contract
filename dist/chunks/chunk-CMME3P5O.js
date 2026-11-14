@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
   SOURCES_SCHEMA
-} from "./chunk-L7GX2DMG.js";
+} from "./chunk-NMQ5EA4F.js";
 import {
   SUPPORTED_CONTRACT_VERSIONS
 } from "./chunk-ELPJD3ND.js";
@@ -95,7 +95,10 @@ var item = looseObject({
     problem(["cost", "units"], "a billed source must state its price units");
   }
 });
+var TOOLS_RPC_ID = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.tools$/;
 var sources = looseObject({
+  rpc: string().regex(TOOLS_RPC_ID, "must be a tools-RPC id: the plugin id and .tools, such as google-workspace.gws.tools").optional(),
+  probe: looseObject({ action }).optional(),
   contractVersion: number().int().refine((version) => SUPPORTED_CONTRACT_VERSIONS.includes(version), {
     message: `must be a contract version this package reads (${SUPPORTED_CONTRACT_VERSIONS.join(", ")})`
   }),

@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
   isToolsRpcId
-} from "./chunk-4JWSB5AE.js";
+} from "./chunk-KWEWSZ4V.js";
 import {
   isEventKind
 } from "./chunk-WJ4C2MR4.js";
@@ -65,7 +65,7 @@ var detail = object({
   from: array(_enum(["external_id", "kind", "occurred_at", "url", "thread", "actors", "labels", "hash"])).min(1).describe("The event fields the detail's input comes from. Identifiers only: an event's title and text are never an input.")
 }).strict().describe("One read of an event's detail: the tool, and the event fields its input comes from.");
 var permissionBase = {
-  identity: array(string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" })).min(1).optional().describe("The identity operations probe asserts for this source (#4, #8). None may be a content operation."),
+  identity: array(string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" })).min(1).optional().describe("The identity operations probe asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it."),
   operations: array(string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" })).min(1).optional().describe("Every operation the source's reads assert, and nothing else. Absent when `rules` states them."),
   rules: array(
     object({

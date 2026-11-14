@@ -14,7 +14,17 @@ export interface SourcePermission {
      * (`gmail.users.messages.get`) is asserted as `<namespace>.read` on `<account>:<operation>`; a bare one
      * (`slack_read_channel`) is an MCP tool, asserted as `<namespace>_<operation>` on `*` (`permission.operationRule`).
      */
-    readonly operations: readonly string[];
+    readonly operations?: readonly string[];
+    /**
+     * Grants stated verbatim, for a provider whose resources are not `<account>:<operation>` (GitHub's `github_api` on
+     * `GET /user`). A source states `operations` or `rules` (#21).
+     */
+    readonly rules?: readonly {
+        readonly action: string;
+        readonly resource: string;
+    }[];
+    /** The identity operations `probe` asserts for this source; they are among `operations` (#4, point 3; #21). Optional. */
+    readonly identity?: readonly string[];
 }
 /** A detail read: a declared read per event, whose inputs come only from the event's own fields, never its text. */
 export interface SourceDetail {
@@ -76,6 +86,12 @@ export interface SourceItem {
 /** The `sources` key. */
 export interface SourcesDescriptor {
     readonly contractVersion: number;
+    /** The plugin's tools-RPC id, `<OpenCode plugin id>.tools` (#4). Optional; when declared, `read` calls it. */
+    readonly rpc?: string;
+    /** The plugin's one `probe` tool: the permission action it asserts (#4, #8). Optional. */
+    readonly probe?: {
+        readonly action: string;
+    };
     readonly items: readonly SourceItem[];
 }
 /** A descriptor as read from an installed package. */

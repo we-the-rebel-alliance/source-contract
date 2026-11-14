@@ -127,7 +127,7 @@ export interface PermissionEvents {
     readonly operations?: readonly string[] | undefined;
     /** The grants verbatim, for a provider whose resources are not `<account>:<operation>` such as GitHub's `github_api` on `GET /user`. */
     readonly rules?: readonly PermissionRuleLike[] | undefined;
-    /** The identity operations `probe` asserts for this source (#4, #8). None may be a content operation. */
+    /** The identity operations `probe` asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it. */
     readonly identity?: readonly string[] | undefined;
 }
 /** A snapshot's permission: the read tool's action, and the provider operations it asserts. */
@@ -138,7 +138,7 @@ export interface PermissionTool {
     readonly operations?: readonly string[] | undefined;
     /** The grants verbatim, when the provider's resources are not `<account>:<operation>`. */
     readonly rules?: readonly PermissionRuleLike[] | undefined;
-    /** The identity operations `probe` asserts for this source (#4, #8). None may be a content operation. */
+    /** The identity operations `probe` asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it. */
     readonly identity?: readonly string[] | undefined;
 }
 /** What one read costs: `free` charges nothing, `metered` charges per unit, `billed` charges per call. */

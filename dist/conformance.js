@@ -1,10 +1,10 @@
 // @we-the-rebel-alliance/source-contract 0.1.0. Built by scripts/build.mjs; do not edit.
 import {
   SOURCES_SCHEMA
-} from "./chunks/chunk-L7GX2DMG.js";
+} from "./chunks/chunk-NMQ5EA4F.js";
 import {
   toolsRpcIdProblems
-} from "./chunks/chunk-4JWSB5AE.js";
+} from "./chunks/chunk-KWEWSZ4V.js";
 import {
   MAX_PAGE_BYTES,
   PAGE,
@@ -17,7 +17,7 @@ import {
 import "./chunks/chunk-I2RXJJJM.js";
 import {
   sessionRules
-} from "./chunks/chunk-F2EQTQXI.js";
+} from "./chunks/chunk-3M5PAKSS.js";
 import {
   fromJSONSchema
 } from "./chunks/chunk-W5SHR7DQ.js";

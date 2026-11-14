@@ -357,7 +357,7 @@
                     "not": {}
                   },
                   "identity": {
-                    "description": "The identity operations probe asserts for this source (#4, #8). None may be a content operation.",
+                    "description": "The identity operations probe asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it.",
                     "minItems": 1,
                     "type": "array",
                     "items": {
@@ -731,7 +731,7 @@
                     "not": {}
                   },
                   "identity": {
-                    "description": "The identity operations probe asserts for this source (#4, #8). None may be a content operation.",
+                    "description": "The identity operations probe asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it.",
                     "minItems": 1,
                     "type": "array",
                     "items": {

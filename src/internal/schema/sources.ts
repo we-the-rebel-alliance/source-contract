@@ -109,7 +109,7 @@ const permissionBase = {
     .array(z.string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" }))
     .min(1)
     .optional()
-    .describe("The identity operations probe asserts for this source (#4, #8). None may be a content operation."),
+    .describe("The identity operations probe asserts for this source (#4, #8); each is among permission.operations, and no content read asserts it."),
   operations: z
     .array(z.string().max(200).regex(OPERATION, { error: "must be a provider operation or an MCP tool name" }))
     .min(1)

@@ -100,7 +100,7 @@ The rules:
 - optional `urlHosts`: the hosts a source's `url` may point at, for display (Memory's rules);
 - optional `scope.suggest`: `{ tool, operations }`, a read-only tool that lists choices at consent, run only at bind in its own session, and never stored.
 
-`readInstalledDescriptor` reads, validates and hashes it (`sha256:` of canonical JSON). A grant stores the hash; a changed descriptor asks the person again. `probe`'s identity operations are not in the descriptor yet, so a consumer passes them to `probe` ([issue #4](https://github.com/we-the-rebel-alliance/source-contract/issues/4)).
+`readInstalledDescriptor` reads, validates and hashes it (`sha256:` of canonical JSON). A grant stores the hash; a changed descriptor asks the person again. Memory's schema admits three optional keys agreed in [issue #4](https://github.com/we-the-rebel-alliance/source-contract/issues/4): `sources.rpc` (the plugin's tools-RPC id, which `read` then calls), `sources.probe.action` (the probe tool's permission action) and per-source `permission.identity` (the identity operations `probe` asserts, each among `permission.operations`). With the last two declared, `probe` is fenced from the descriptor alone; until then a consumer passes the identity operations.
 
 ## L2: the protocol
 

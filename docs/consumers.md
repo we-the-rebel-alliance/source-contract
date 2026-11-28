@@ -345,7 +345,48 @@ time: the preview fence allows only the preview method, and the commit fence onl
 reach outside the granted phase. A `read-only` plugin refuses a non-read RPC call even with a grant; `ask-changes` and
 `all` need the ask or the grant. Write and export methods are therefore available over RPC, under a confirmation (LD-5).
 
-## 7. Errors
+## 7. Show an auditor what each plugin can read and do
+
+An auditor asks what each connector can reach in a person's accounts, and who granted it. The `audit` module builds
+that answer from the same catalog listing and grant records the app already holds. The result is a plain value, so an
+app may render it or export it as JSON.
+
+```ts
+import { auditReport, renderAuditReport, AUDIT_SCHEMA } from "@we-the-rebel-alliance/plugin-contract/audit"
+
+const listing = await listInstalledPlugins(ctx)
+const report = auditReport({
+  person: "ana@example.com",
+  plugins: listing.plugins,               // CatalogPlugin[], or InstalledManifest[]
+  access: {                               // each plugin's options.access, by plugin name; defaults to all
+    harbour: "read-only",
+    trellis: "ask-changes",
+  },
+  grants: [
+    { ...readGrant, person: "ana@example.com", grantedAt: "2026-11-20T10:00:00.000Z" },
+    { ...actGrant, person: "ana@example.com", grantedAt: "2026-11-20T10:05:00.000Z" },
+  ],
+})
+
+const markdown = renderAuditReport(report) // deterministic Markdown for the auditor
+
+// Or export the JSON and check it against the published schema.
+const exported = JSON.stringify(report, null, 2) // dist/schemas/audit.json is the same shape
+const checked = AUDIT_SCHEMA.check(JSON.parse(exported))
+if (!checked.ok) throw new Error(checked.problems.join("\n"))
+```
+
+The report names every installed plugin with its package, version, manifest hash and access level. It lists every
+declared source and action with the grants behind it, and every method with its class and what the access level gives
+it: `runs`, `asks first` or `off`. A grant carries its consumer, account, canonical scope, manifest hash, `disabled` and
+`stale` marks, the person who gave it and the time they gave it. `stale` is true when the grant's manifest hash is not
+the installed manifest's hash, so the person must consent again.
+
+A grant whose plugin, source or action is not installed is listed under `problems`, with its reason and the whole
+grant. It is never dropped and never thrown. The report carries no credential, token or provider value: an auditor sees
+the declarations and the grant bindings, not the account's secrets.
+
+## 8. Errors
 
 Every failure reads `CODE: What happened. Next step: What to do.` The one table is `ERROR_CODES` in `events`:
 

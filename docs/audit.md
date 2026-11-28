@@ -3,10 +3,11 @@
 The audit report answers the question an auditor asks first: for one person, what may each installed plugin read and do,
 and who granted it? It is built from the installed manifests, the person's access level per plugin and the grant records
 the host keeps. It is evidence only: the report carries declarations and grant bindings, never provider content, a
-credential or a token (contract §15; issue #94).
+credential or a token (contract §15; issue #94). `renderAuditReport` turns the report into deterministic Markdown for an
+auditor.
 
 ```ts
-import { AUDIT_SCHEMA, auditReport } from "@we-the-rebel-alliance/plugin-contract/audit"
+import { AUDIT_SCHEMA, auditReport, renderAuditReport } from "@we-the-rebel-alliance/plugin-contract/audit"
 import { listInstalledPlugins } from "@we-the-rebel-alliance/plugin-contract/catalog"
 
 const listing = await listInstalledPlugins(ctx)
@@ -28,6 +29,7 @@ const report = auditReport({
 })
 
 AUDIT_SCHEMA.check(report) // { ok: true, value: report }
+const markdown = renderAuditReport(report) // the report as Markdown for an auditor
 ```
 
 `plugins` takes the catalog's `CatalogPlugin[]` or any `InstalledManifest[]`. `access` maps a plugin's name to its
@@ -52,10 +54,19 @@ A grant whose plugin is not installed, or whose source or action is not declared
 dropped: it is listed in `problems` with its binding and one sentence saying what is missing. `auditReport` never throws
 for such a grant.
 
+## Markdown
+
+`renderAuditReport(report)` writes one section per plugin: a methods table, a table of what it may read and a table of
+what it may do. Every read or action row names the grant behind it: consumer, account, scope, granted at and granted by.
+A stale or disabled grant is marked in its cell, and every entry under `problems` is marked as a problem at the end.
+
+The output is deterministic: the same report makes the same bytes. Provider text is data, so a pipe or a newline in a
+grant's scope is escaped and cannot break a table.
+
 ## Exports
 
 | Export | Does |
 |---|---|
-| `auditReport`, `AuditInput`, `AuditReport` | `auditReport(input)` builds one person's report from installed plugins, access levels and grant records |
+| `auditReport`, `renderAuditReport`, `AuditInput`, `AuditReport` | `auditReport(input)` builds one person's report from installed plugins, access levels and grant records; `renderAuditReport(report)` renders it as deterministic Markdown |
 | `AUDIT_SCHEMA`, `AuditPlugin`, `AuditSource`, `AuditAction`, `AuditMethod`, `AuditAccess` | the report's validator, published as `dist/schemas/audit.json`, and the plugin, source, action and method shapes |
 | `AuditGrantBinding`, `ReadGrantRecord`, `ActGrantRecord`, `AuditGrantRecord`, `AuditProblem` | a grant as the report shows it, the read and action records it is built from, and a grant that could not be placed |

@@ -206,7 +206,102 @@ function auditReport(input) {
   return { person: input.person, plugins: contexts.map((context) => context.report), problems };
 }
 
+// src/audit/render.ts
+var LINE_BREAK = /\r\n|\r|\n/g;
+function cell(value) {
+  return value.replace(LINE_BREAK, "<br>").replaceAll("|", "\\|");
+}
+function line(value) {
+  return value.replace(LINE_BREAK, " ");
+}
+function list(values) {
+  return values.length === 0 ? "none" : cell(values.join(", "));
+}
+function scopeText(scope) {
+  return JSON.stringify(scope);
+}
+function grantText(grant) {
+  const marks = [grant.stale ? "stale" : "", grant.disabled ? "disabled" : ""].filter((mark) => mark !== "");
+  const suffix = marks.length === 0 ? "" : ` (${marks.join(", ")})`;
+  return `${grant.consumer} on ${grant.account}, scope ${scopeText(grant.scope)}, granted ${grant.grantedAt} by ${grant.person}${suffix}`;
+}
+function costText(cost2) {
+  const units = cost2.units ?? [];
+  if (units.length === 0) return cost2.class;
+  return `${cost2.class}: ${units.map((unit) => `${unit.usd} USD per ${unit.per}`).join("; ")}`;
+}
+function table(headers, rows) {
+  return [
+    `| ${headers.join(" | ")} |`,
+    `| ${headers.map(() => "---").join(" | ")} |`,
+    ...rows.map((row) => `| ${row.join(" | ")} |`)
+  ];
+}
+function renderAuditReport(report) {
+  const lines = [`# Audit report for ${line(report.person)}`, ""];
+  for (const plugin of report.plugins) {
+    lines.push(`## ${line(plugin.package)} ${line(plugin.version)}`, "");
+    lines.push(`Manifest: ${line(plugin.manifestHash)}`, `Access: ${line(plugin.access)}`, "");
+    lines.push("### Methods", "");
+    const methods = plugin.methods.map((method) => [
+      cell(method.method),
+      cell(method.class),
+      cell(method.effect ?? "none"),
+      cell(method.access)
+    ]);
+    lines.push(...table(["Method", "Class", "Declared effect", "Access"], methods), "");
+    lines.push("### What it may read", "");
+    if (plugin.sources.length === 0) {
+      lines.push("No sources.", "");
+    } else {
+      const rows = [];
+      for (const source of plugin.sources) {
+        const declared = [
+          cell(source.id),
+          cell(source.method),
+          list(source.operations),
+          cell(source.accounts),
+          source.private ? "yes" : "no",
+          cell(costText(source.cost))
+        ];
+        if (source.grants.length === 0) rows.push([...declared, "no grant"]);
+        else for (const grant of source.grants) rows.push([...declared, cell(grantText(grant))]);
+      }
+      lines.push(...table(["Source", "Method", "Operations", "Accounts", "Private", "Cost", "Grant"], rows), "");
+    }
+    lines.push("### What it may do", "");
+    if (plugin.actions.length === 0) {
+      lines.push("No actions.", "");
+    } else {
+      const rows = [];
+      for (const action of plugin.actions) {
+        const declared = [
+          cell(action.id),
+          cell(action.preview),
+          cell(action.commit),
+          list(action.operations),
+          cell(action.confirmation)
+        ];
+        if (action.grants.length === 0) rows.push([...declared, "no grant"]);
+        else for (const grant of action.grants) rows.push([...declared, cell(grantText(grant))]);
+      }
+      lines.push(...table(["Action", "Preview", "Commit", "Operations", "Confirmation", "Grant"], rows), "");
+    }
+  }
+  lines.push("## Problems", "");
+  if (report.problems.length === 0) {
+    lines.push("No problems.");
+  } else {
+    for (const problem of report.problems) {
+      lines.push(`- **problem:** ${line(problem.problem)}. ${line(grantText(problem.grant))}`);
+    }
+  }
+  return `${lines.join("\n").replace(/\n+$/, "")}
+`;
+}
+
 export {
   AUDIT_SCHEMA,
-  auditReport
+  auditReport,
+  renderAuditReport
 };

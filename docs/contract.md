@@ -330,7 +330,7 @@ Remote apps can't read the disk, and RPC is untrusted for manifests. The **catal
 | `bus` | plugin | typed `changed`, `status`, `account` emitters |
 | `grant` | plugin | action-grant verifier (#40) |
 | `read`, `act` | app | fenced reads and actions, through the catalog or embedded |
-| `audit` | app | what each plugin may read and do for a person, and the grants behind it |
+| `audit` | app | what each installed plugin may read and do for a person, with the grant behind it, and its Markdown report |
 | `params`, `pick` | app | relative times, `$me`, field selection |
 | `outputs` | both | the snapshot shape registry and its JSON Schemas |
 | `catalog` | app, catalog | installed manifests |

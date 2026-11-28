@@ -22,4 +22,4 @@ it from the registry in `outputs`. See [manifest](manifest.md), [outputs](output
 
 | Export | Does |
 |---|---|
-| `SCHEMAS` | every published validator, in bundle order: the manifest, the outputs, the facts and the hint |
+| `SCHEMAS` | every published validator, in bundle order: the manifest, the outputs, the facts, the hint and the audit report |

@@ -64,7 +64,7 @@ bundles only what it imports.
 | `outputs` | both | the snapshot shape registry and its JSON Schemas | [outputs](docs/outputs.md) |
 | `read` | app | fenced reads, detail reads and `probe`, through the catalog or embedded | [read](docs/read.md) |
 | `act` | app | preview then commit of a register-minted plan under a host-signed action grant | [act](docs/act.md) |
-| `audit` | app | what each plugin may read and do for a person, and the grant behind it | [audit](docs/audit.md) |
+| `audit` | app | what each installed plugin may read and do for a person, with the grant behind it, and its Markdown report | [audit](docs/audit.md) |
 | `params` | app | relative times, windows and `$me`, resolved at read time | [params](docs/params.md) |
 | `pick` | app | field selection, checked against the output's schema | [pick](docs/pick.md) |
 | `catalog` | app, catalog | installed manifests, the broker request and the consumer's reader | [catalog](docs/catalog.md) |

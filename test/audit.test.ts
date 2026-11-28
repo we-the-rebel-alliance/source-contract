@@ -1,14 +1,25 @@
 // What each installed plugin may read and do for one person, and the grant behind each (issue #94). The report is
 // evidence for an auditor: declarations and grant bindings only, never content, a credential or a token.
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
+import { dirname, join } from "node:path"
 import { describe, test } from "node:test"
-import { AUDIT_SCHEMA, auditReport, type ActGrantRecord, type AuditGrantRecord, type AuditReport, type ReadGrantRecord } from "../src/audit.ts"
-import { checkManifest, type InstalledManifest } from "../src/manifest.ts"
+import { fileURLToPath } from "node:url"
+import { AUDIT_SCHEMA, auditReport, renderAuditReport, type ActGrantRecord, type AuditGrantRecord, type AuditReport, type ReadGrantRecord } from "../src/audit.ts"
+import { checkManifest, readInstalledManifest, type InstalledManifest } from "../src/manifest.ts"
 import { installed, manifest } from "./support/manifest.ts"
 
+const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const ANA = "ana@example.com"
 const GRANTED_AT = "2026-11-28T09:00:00Z"
 const OLD_HASH = `sha256:${"0".repeat(64)}`
+
+/** One example's installed manifest. */
+function example(name: string): InstalledManifest {
+  const read = readInstalledManifest(join(root, "examples", name))
+  assert.ok(read.ok, read.ok ? "" : read.problems.join("; "))
+  return read.value
+}
 
 const plugin = (change: (value: any) => void = () => {}): InstalledManifest => {
   const checked = checkManifest(manifest(change))
@@ -172,5 +183,107 @@ describe("the audit report", () => {
     assert.ok(generated["required"].includes("plugins"))
     assert.ok(generated["required"].includes("problems"))
     assert.equal(AUDIT_SCHEMA.check({ ...report, token: "a token the report never carries" }).ok, false)
+  })
+})
+
+describe("the audit report as Markdown", () => {
+  test("builds the three examples with fixed grants and renders the committed Markdown", () => {
+    const integration = example("integration")
+    const mcp = example("mcp")
+    const tools = example("tools")
+    const grants: AuditGrantRecord[] = [
+      {
+        consumer: "notes",
+        source: "harbour.notes",
+        account: "work",
+        scope: { spaces: ["space-research"] },
+        manifestHash: integration.hash,
+        disabled: true,
+        person: "Ana Silva",
+        grantedAt: "2026-11-20T10:00:00.000Z",
+      },
+      {
+        consumer: "digest",
+        source: "trellis.messages",
+        account: "personal",
+        scope: { channels: ["C-RESEARCH"] },
+        manifestHash: `sha256:${"0".repeat(64)}`,
+        person: "Ana Silva",
+        grantedAt: "2026-11-20T10:05:00.000Z",
+      },
+      {
+        consumer: "notes",
+        source: "ghost.messages",
+        account: "work",
+        scope: {},
+        manifestHash: `sha256:${"1".repeat(64)}`,
+        person: "Ana Silva",
+        grantedAt: "2026-11-20T10:10:00.000Z",
+      },
+    ]
+    const report = auditReport({
+      person: "Ana Silva",
+      plugins: [integration, mcp, tools],
+      access: { harbour: "read-only", trellis: "ask-changes", glyph: "all" },
+      grants,
+    })
+    const checked = AUDIT_SCHEMA.check(report)
+    assert.ok(checked.ok, checked.ok ? "" : checked.problems.join("\n"))
+    const markdown = renderAuditReport(report)
+    assert.equal(markdown, readFileSync(join(root, "test", "fixtures", "audit-report.md"), "utf8"))
+    assert.equal(renderAuditReport(report), markdown, "the same report makes the same bytes")
+
+    const glyph = report.plugins.find((plugin) => plugin.package === tools.package)
+    assert.ok(glyph)
+    assert.deepEqual(glyph.sources, [])
+    assert.deepEqual(glyph.actions, [])
+    const accessOf = (method: string) => glyph.methods.find((entry) => entry.method === method)?.access
+    assert.equal(accessOf("word_count"), "runs")
+    assert.equal(accessOf("write_note"), "runs")
+    assert.equal(report.problems.length, 1)
+    assert.match(report.problems[0]!.problem, /the plugin "ghost" is not installed/)
+  })
+
+  test("escapes a pipe and a newline in provider text, so a grant cannot break a table", () => {
+    const entry = installed(manifest())
+    const report = auditReport({
+      person: "Ana\nSilva",
+      plugins: [entry],
+      grants: [
+        {
+          consumer: "notes",
+          source: "demo.messages",
+          account: "ana@example.com",
+          scope: { channels: ["team|one", "line\nbreak"] },
+          manifestHash: entry.hash,
+          person: "Ana\nSilva",
+          grantedAt: "2026-11-20T10:00:00.000Z",
+        },
+      ],
+    })
+    const markdown = renderAuditReport(report)
+    assert.match(markdown, /^# Audit report for Ana Silva$/m)
+    assert.ok(markdown.includes("team\\|one"), "the pipe is escaped")
+    assert.equal(markdown.includes("team|one"), false, "no raw pipe reaches the table")
+    assert.ok(markdown.includes("line\\nbreak"), "the newline is JSON-escaped")
+    const rows = markdown.split("\n").filter((line) => line.startsWith("| demo.messages |"))
+    assert.equal(rows.length, 1)
+    assert.match(rows[0] ?? "", /team\\\|one/)
+  })
+
+  test("renders one row for each grant under an action", () => {
+    const report = auditReport({
+      person: ANA,
+      plugins: [DEMO],
+      grants: [
+        actGrant({ account: "work" }),
+        actGrant({ consumer: "digest", account: "personal" }),
+      ],
+    })
+    const markdown = renderAuditReport(report)
+    const rows = markdown.split("\n").filter((line) => line.startsWith("| demo.messages.send |"))
+    assert.equal(rows.length, 2)
+    assert.match(rows[0] ?? "", /notes on work/)
+    assert.match(rows[1] ?? "", /digest on personal/)
   })
 })

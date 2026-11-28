@@ -5,11 +5,13 @@
  *
  *   const report = auditReport({ person, plugins: listing.plugins, access: { demo: "ask-changes" }, grants })
  *   AUDIT_SCHEMA.check(report) // the same shape, published as dist/schemas/audit.json
+ *   const markdown = renderAuditReport(report) // deterministic Markdown for an auditor
  *
  * A grant for a plugin, source or action that is not installed is kept in `problems` with its binding, never dropped
  * and never thrown. `docs/audit.md` is the guide.
  */
 export { AUDIT_SCHEMA, auditReport } from "./audit/report.ts"
+export { renderAuditReport } from "./audit/render.ts"
 export type {
   ActGrantRecord,
   AuditAccess,

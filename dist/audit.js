@@ -1,8 +1,9 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   AUDIT_SCHEMA,
-  auditReport
-} from "./chunks/chunk-4CLPVV4N.js";
+  auditReport,
+  renderAuditReport
+} from "./chunks/chunk-XAHXHRTU.js";
 import "./chunks/chunk-UP4MI2EO.js";
 import "./chunks/chunk-AMT4OSAU.js";
 import "./chunks/chunk-YOSR7DZV.js";
@@ -16,5 +17,6 @@ import "./chunks/chunk-AYJEC7Y2.js";
 import "./chunks/chunk-WLRWVIVP.js";
 export {
   AUDIT_SCHEMA,
-  auditReport
+  auditReport,
+  renderAuditReport
 };

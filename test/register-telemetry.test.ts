@@ -109,7 +109,7 @@ describe("register: the event envelope", () => {
 
     assert.equal(field(commitEvent!, "method"), "send_message")
     assert.equal(field(commitEvent!, "method_class"), "send")
-    assert.equal(field(commitEvent!, "allowed_by"), "ask")
+    assert.equal(field(commitEvent!, "allowed_by"), "rule")
     assert.equal(field(commitEvent!, "outcome"), "ok")
 
     assert.match(readEvent!.subject ?? "", /agent=agent_[0-9a-f]{32};session=session_[0-9a-f]{32}/)
@@ -119,6 +119,24 @@ describe("register: the event envelope", () => {
     const text = readFileSync(path, "utf8")
     assert.equal(text.includes("ghp_abcdefghijklmnop1234"), false, "a tool's input never reaches the log")
     assert.equal(text.includes("provider secret text"), false, "a tool's answer never reaches the log")
+  })
+
+  test("a tool door names the rule the gate evaluated", async () => {
+    const asked = makeHarness()
+    asked.sessions.get("s1")!.permissions = [{ action: "demo.events_list", resource: "*", effect: "ask" }]
+    const askedPath = logPath()
+    await register(asked.ctx, demo(), handlers(), { telemetry: { path: askedPath } })
+    await asked.tools.get("demo_events_list")!.tool.execute({}, context())
+    assert.equal(field(eventsOf(askedPath)[0]!, "allowed_by"), "ask")
+
+    const allowed = makeHarness()
+    const allowedPath = logPath()
+    await register(allowed.ctx, demo(), handlers(), { telemetry: { path: allowedPath } })
+    const plan = await allowed.tools.get("demo_plan_send")!.tool.execute({}, context())
+    const planId = (plan.output as { planId: string }).planId
+    await allowed.tools.get("demo_send_message")!.tool.execute({ planId }, context())
+    const commit = eventsOf(allowedPath).find((event) => event.type === "plugin.commit.v1")
+    assert.equal(field(commit!, "allowed_by"), "rule")
   })
 
   test("a call refused before the gate appends one refusal event with its code", async () => {
@@ -133,6 +151,7 @@ describe("register: the event envelope", () => {
     assert.equal(field(events[0]!, "method"), "events_list")
     assert.equal(field(events[0]!, "outcome"), "ACCOUNT_UNKNOWN")
     assert.equal(field(events[0]!, "allowed_by"), "none")
+    assert.equal(field(events[0]!, "account"), "unknown", "the caller's account text is not logged before it resolves")
   })
 
   test("a handler failure appends one refusal with its code, and no message", async () => {

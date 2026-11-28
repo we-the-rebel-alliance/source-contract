@@ -219,12 +219,13 @@ Every call through doors 1 and 3 writes one event in the contract's envelope (§
 | `plugin.commit` | a commit, or another non-read method, ran |
 | `plugin.refused` | the call did not return, with the contract code that refused it |
 
-The event carries the method, its class and effect, the account alias, the consumer, `allowed_by` (`grant`, `ask`,
-`rule` or `none`), the outcome (`ok` or the code), and the duration. A `plugin.read` also carries the number of events
-the page returned (zero when the answer has no page) and, when the provider reports it, its `cost.usd`.
+The event carries the method, its class and effect, the resolved account alias (`unknown` when the call was refused
+before it resolved), the consumer, `allowed_by` (`grant`, `ask`, `rule` or `none`), the outcome (`ok` or the code), and
+the duration. A `plugin.read` also carries the number of events the page returned (zero when the answer has no page) and,
+when the provider reports it, its `cost.usd`.
 
-`register` never writes a tool's input or answer, provider text, a credential or a grant. The subject holds pseudonymous
-agent and session ids, never the raw ids.
+`register` never writes a tool's input or answer, provider text, a credential or a grant. Caller-supplied names are
+bounded and screened, and the subject holds pseudonymous agent and session ids, never the raw ids.
 
 The log is local JSON Lines: `wiring.telemetry.path` when the host gives one, otherwise
 `$XDG_DATA_HOME/opencode/plugin-data/<name>/events.jsonl`, or `~/.local/share/opencode/plugin-data/<name>/events.jsonl`

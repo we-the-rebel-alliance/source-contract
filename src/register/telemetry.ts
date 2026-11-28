@@ -77,15 +77,16 @@ function pseudonym(kind: "agent" | "session", value: string): string {
   return `${kind}_${createHash("sha256").update(`${kind}\u0000${text}`).digest("hex").slice(0, 32)}`
 }
 
-/** The account a call names, or `default` before the register resolves one. */
-export function accountOf(value: unknown): string {
-  return plain(value) && typeof value["account"] === "string" && value["account"] !== "" ? value["account"] : "default"
-}
+/** The most characters a caller-supplied name may take in an event. */
+const SAFE_TEXT_MAX = 128
 
-/** A value that carries no secret; a value the screen flags is replaced, so the call still writes an event. */
+/** A bounded, plain value that carries no secret; a flagged value is replaced, so the call still writes an event. */
 function safeText(value: string, fallback: string): string {
   const text = value.trim() === "" ? fallback : value
-  return secretKinds(text).length > 0 ? "redacted" : text
+  if (secretKinds(text).length > 0) return "redacted"
+  const plainText = text.replace(/[\u0000-\u001f\u007f]+/g, " ").trim()
+  if (plainText === "") return fallback
+  return plainText.length > SAFE_TEXT_MAX ? plainText.slice(0, SAFE_TEXT_MAX) : plainText
 }
 
 /** The count of events a read answered, or zero when its answer has no event list. */

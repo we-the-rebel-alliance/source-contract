@@ -26,7 +26,7 @@ import { callEffect, gate } from "./assertions.ts"
 import { permissionRefusal, refusal, refusalOf, RegisterError, type Refusal } from "./errors.ts"
 import type { MethodEntry } from "./handlers.ts"
 import { execute, prepareCall, type BusReader, type CallEnvironment } from "./invoke.ts"
-import { accountOf, type CallTrace } from "./telemetry.ts"
+import type { CallTrace } from "./telemetry.ts"
 import { validate } from "./validate.ts"
 
 /** The envelope's failure, as the RPC declares it: the code and the next step beside the message. */
@@ -143,8 +143,14 @@ function grantActions(environment: CallEnvironment): Readonly<Record<string, "re
   return actions
 }
 
+/** The part of a context the rule lookup reads: both doors have it, and the gate stays the authority. */
+export interface RulesContext {
+  readonly session: RpcContext["session"]
+  readonly agent: RpcContext["agent"]
+}
+
 /** The session's agent and rules: the agent's, then the session's, as OpenCode reads them. */
-async function rulesOf(context: RpcContext, sessionID: string): Promise<{ readonly agent: string; readonly rules: readonly { readonly action: string; readonly resource: string; readonly effect: "allow" | "deny" | "ask" }[] }> {
+export async function rulesOf(context: RulesContext, sessionID: string): Promise<{ readonly agent: string; readonly rules: readonly { readonly action: string; readonly resource: string; readonly effect: "allow" | "deny" | "ask" }[] }> {
   let info: Awaited<ReturnType<RpcContext["session"]["get"]>>
   try {
     info = await context.session.get({ sessionID })
@@ -219,7 +225,7 @@ async function invoke(
   const trace: CallTrace = {
     sessionID: "unknown",
     agent: "unknown",
-    account: accountOf(plain(raw) ? raw["input"] : undefined),
+    account: "unknown",
     consumer: "unknown",
     allowedBy: "none",
   }

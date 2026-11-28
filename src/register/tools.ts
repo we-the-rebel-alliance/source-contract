@@ -9,11 +9,12 @@
  * resolution and the one permission gate are not reimplemented here.
  */
 import type { Plugin } from "@opencode/plugin"
-import { gate } from "./assertions.ts"
+import { callEffect, gate } from "./assertions.ts"
 import { permissionRefusal, RegisterError } from "./errors.ts"
 import type { MethodEntry } from "./handlers.ts"
 import { execute, prepareCall, toolCall, type BusReader, type CallEnvironment } from "./invoke.ts"
-import { accountOf, type CallTrace } from "./telemetry.ts"
+import { rulesOf, type RpcContext } from "./rpc.ts"
+import type { CallTrace } from "./telemetry.ts"
 
 /** The tool context an executor receives, as much of OpenCode's `ToolContext` as this module uses. */
 export interface ToolCallContext {
@@ -58,12 +59,15 @@ export interface ToolContext {
       readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     }): Promise<void>
   }
+  /** The session and agent the call runs as, read only to name the rule the gate evaluated. */
+  readonly session: RpcContext["session"]
+  readonly agent: RpcContext["agent"]
   /** The editor is `unknown` here because the host's `ToolEditor.add` is generic over each schema type; `installTools`
    * narrows it to `ToolEditor`, exactly as the accounts module narrows its transforms. */
   readonly tool: { readonly transform: (callback: (editor: unknown) => void) => Promise<{ dispose(): Promise<void> }> }
 }
 
-const hostContextIsToolContext = (context: Pick<Plugin.Context, "tool" | "permission">): ToolContext => context
+const hostContextIsToolContext = (context: Pick<Plugin.Context, "tool" | "permission" | "session" | "agent">): ToolContext => context
 void hostContextIsToolContext
 
 /** The text a direct agent tool shows for an answer. A string is itself; anything else is its JSON. */
@@ -95,19 +99,26 @@ export function toolRegistrations(environment: CallEnvironment, context: ToolCon
       const trace: CallTrace = {
         sessionID: callContext.sessionID,
         agent: callContext.agent,
-        account: accountOf(raw),
+        account: "unknown",
         consumer: callContext.agent.trim() === "" ? "unknown" : callContext.agent,
         allowedBy: "none",
       }
       const started = performance.now()
+      let effect: "allow" | "deny" | "ask" = "allow"
       try {
         prepared = prepareCall(entry, raw, environment.accounts, environment.plans)
         trace.account = prepared.account
+        try {
+          const resolved = await rulesOf(context, callContext.sessionID)
+          effect = callEffect(environment.name, entry, prepared.account, resolved.rules)
+        } catch {
+          // The gate remains the authority; the event names the rule path only when it can be read.
+        }
         await gate(context, environment.name, entry, callContext, prepared.account, {
           save: true,
           source: { type: "tool", messageID: callContext.messageID, id: callContext.id },
         })
-        trace.allowedBy = entry.item.class === "read" ? "rule" : "ask"
+        trace.allowedBy = effect === "ask" ? "ask" : "rule"
         const value = await execute(environment, entry, prepared, toolCall(callContext, door), bus)
         environment.telemetry.record({ entry, door, trace, outcome: "ok", durationMs: performance.now() - started, value })
         return { output: value, content: textOf(value) }

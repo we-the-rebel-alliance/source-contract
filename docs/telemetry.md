@@ -46,14 +46,15 @@ An event is CloudEvents 1.0.
 | `time` | When it happened, as an ISO 8601 UTC time |
 | `type` | The event's name and version in the catalogue, such as `plugin.read.v1` |
 | `source` | `plugin://<component>/<version>/<deployment>` |
-| `subject` | Pseudonymous ids, as `person=…;agent=…;session=…;trace=…`; a part is left out when it is absent |
+| `subject` | Pseudonymous ids, each `<kind>_…`, as `person=person_p_…;agent=agent_p_…;session=session_p_…;trace=…`; a part is left out when it is absent |
 | `traceparent` | The W3C trace context, when the work has a trace |
 | `datacontenttype` | `application/json` |
 | `data` | The event's fields. Each is `{ class, value }`, and the class comes from the catalogue |
 
 `subject.trace` and `traceparent` must name the same trace when both are present. A malformed `traceparent`, an all-zero
-trace or span id, and a version of `ff` are refused. The subject carries pseudonyms only, never a raw id, an account, a
-token or a provider's own identifier.
+trace or span id, and a version of `ff` are refused. Each person, agent and session id starts with its kind and an
+underscore, such as `person_p_…`, and holds only letters, digits, underscores and hyphens. The subject therefore carries
+pseudonyms only: a raw id, an email address, an account, a token or a provider's own identifier is refused.
 
 `createEvent` fills `id` and `time`, derives `source` from the component, its version and the deployment, and takes each
 field's class from the catalogue. It throws on a type the catalogue does not declare, a missing or extra field, a
@@ -71,7 +72,7 @@ Each catalogue entry declares its type, version, event class and every field's c
   fields: {
     method: { class: "metadata" },
     // …
-    cost_usd: { class: "metadata" },
+    cost_usd: { class: "metadata", optional: true },
   },
 }
 ```
@@ -95,10 +96,13 @@ The contract's catalogue holds:
 | `plugin.read` | A read returned, with the count of events and, when the provider reports it, the cost |
 | `plugin.plan` | A planning call returned a plan, without writing anything |
 | `plugin.commit` | A commit ran the plan it was given |
-| `plugin.refused` | A call was refused before it reached the provider, with the code that explains why |
+| `plugin.refused` | A call was refused before it reached the provider; `outcome` is the contract's error-table code that explains why |
 | `account.signed_in` | An account signed in and became ready |
 | `account.signed_out` | An account signed out |
 | `account.needs_sign_in` | An account needs a person to sign in again |
+
+For `plugin.refused`, `outcome` is the contract's error-table code, not a sentence. For `account.*`, `reason` is a short
+code or a one-line machine reason, never a provider's prose.
 
 A changed field, or a changed meaning, is a new version of the type. A reader never guesses which version it holds.
 
@@ -110,6 +114,7 @@ A changed field, or a changed meaning, is a new version of the type. A reader ne
 - a field the catalogue declares but the event leaves out;
 - a field the event carries but the catalogue does not declare, so it has no class;
 - a field whose class differs from the catalogue's;
+- a subject id that is not a pseudonym of its kind;
 - a subject whose trace differs from `traceparent`;
 - any value the contract's secret screen flags, with the kind of secret and the field path, never the value.
 

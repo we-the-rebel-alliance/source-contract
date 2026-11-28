@@ -395,7 +395,7 @@ The envelope is CloudEvents 1.0:
 | `time` | when it happened, as an ISO 8601 UTC time |
 | `type` | the event's name and version in the catalogue, such as `plugin.read.v1` |
 | `source` | `plugin://<component>/<version>/<deployment>` |
-| `subject` | pseudonymous ids, as `person=…;agent=…;session=…;trace=…` |
+| `subject` | pseudonymous ids, each `<kind>_…`, as `person=person_p_…;agent=agent_p_…;session=session_p_…;trace=…` |
 | `traceparent` | the W3C trace context, when the work has a trace |
 | `datacontenttype` | `application/json` |
 | `data` | the event's fields, each `{ class, value }` |
@@ -409,10 +409,15 @@ declares both, never the caller:
 | `plugin.read` | a read returned, with the count of events and, when the provider reports it, the cost |
 | `plugin.plan` | a planning call returned a plan, without writing anything |
 | `plugin.commit` | a commit ran the plan it was given |
-| `plugin.refused` | a call was refused before it reached the provider, with the code that explains why |
+| `plugin.refused` | a call was refused before it reached the provider; `outcome` is the contract's error-table code that explains why |
 | `account.signed_in` | an account signed in and became ready |
 | `account.signed_out` | an account signed out |
 | `account.needs_sign_in` | an account needs a person to sign in again |
+
+For `plugin.refused`, `outcome` is the contract's error-table code, not a sentence. For `account.*`, `reason` is a short
+code or a one-line machine reason, never a provider's prose. Each person, agent and session id starts with its kind and
+an underscore, such as `person_p_…`, and holds only letters, digits, underscores and hyphens, so a raw id or an email
+address is refused.
 
 Every type is versioned. A changed field or meaning is a new version, so a reader never guesses. `validateEvent(event,
 catalogue)` refuses an unknown type, a missing field, a field the catalogue does not declare (so it has no class), a

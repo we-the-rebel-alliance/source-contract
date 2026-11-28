@@ -96,6 +96,10 @@ export function parseSubject(subject: string | undefined): ParsedSubject {
       problems.push(`subject.${key}: is not a non-empty id`)
       continue
     }
+    if (key !== "trace" && !new RegExp(`^${key}_[A-Za-z0-9_-]{8,128}$`).test(decoded)) {
+      problems.push(`subject.${key}: is not a pseudonym starting with ${key}_`)
+      continue
+    }
     value[key] = decoded
   }
   if (problems.length > 0) return { ok: false, problems }

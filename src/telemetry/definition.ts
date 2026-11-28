@@ -96,7 +96,7 @@ function declared(event: TelemetryEventDefinition): TelemetryEventDefinition {
   return Object.freeze({ ...event, fields: Object.freeze({ ...event.fields }) })
 }
 
-/** The fields every call through a door carries, whatever its class. */
+/** The fields every call through a door carries, whatever its class. `outcome` is `ok` or the contract's error-table code. */
 const CALL_FIELDS = {
   method: { class: "metadata" },
   method_class: { class: "metadata" },
@@ -108,7 +108,10 @@ const CALL_FIELDS = {
   duration_ms: { class: "metadata" },
 } as const satisfies Readonly<Record<string, TelemetryField>>
 
-/** The fields an account state change carries; a reason is optional because not every change has one. */
+/**
+ * The fields an account state change carries; a reason is optional because not every change has one. `reason` is a
+ * short code or a one-line machine reason, never a provider's prose.
+ */
 const ACCOUNT_FIELDS = {
   account: { class: "metadata" },
   state: { class: "metadata" },
@@ -149,7 +152,7 @@ export const TELEMETRY_CATALOGUE: readonly TelemetryEventDefinition[] = Object.f
     type: "plugin.refused",
     version: 1,
     class: "audit",
-    note: "A call was refused before it reached the provider, with the code that explains why.",
+    note: "A call was refused before it reached the provider; `outcome` is the contract's error-table code that explains why.",
     fields: CALL_FIELDS,
   }),
   declared({

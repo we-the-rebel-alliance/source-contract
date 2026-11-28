@@ -55,6 +55,7 @@ function subject(): TelemetrySubject {
 function fieldsOf(definition: TelemetryEventDefinition): Record<string, unknown> {
   return Object.fromEntries(
     Object.keys(definition.fields).map((name) => {
+      if (definition.type === "plugin.refused" && name === "outcome") return [name, "PERMISSION_DENIED"]
       if (!Object.hasOwn(SAMPLE, name)) throw new Error(`${definition.type}.${name}: the test has no sample value`)
       return [name, SAMPLE[name]]
     }),
@@ -110,6 +111,13 @@ describe("the contract's telemetry catalogue", () => {
       assert.deepEqual(validateEvent(event, TELEMETRY_CATALOGUE), { ok: true, value: event })
       assert.equal(TELEMETRY_EVENT_SCHEMA.check(event).ok, true, definition.type)
     }
+  })
+
+  test("a refusal carries the contract's error code as its outcome", () => {
+    const definition = catalogueEvents(TELEMETRY_CATALOGUE).find((event) => event.type === "plugin.refused")!
+    const event = eventOf(definition)
+    assert.deepEqual(event.data["outcome"], { class: "metadata", value: "PERMISSION_DENIED" })
+    assert.equal(validateEvent(event, TELEMETRY_CATALOGUE).ok, true)
   })
 
   test("a read may leave out the provider's cost when none was reported", () => {
@@ -219,6 +227,17 @@ describe("what validateEvent refuses", () => {
     assert.equal(checked.ok, false)
     if (checked.ok) return
     assert.match(checked.problems.join("\n"), /subject\.trace: names a different trace from traceparent/)
+  })
+
+  test("a raw subject id or an email address is refused, and a pseudonym of its kind is accepted", () => {
+    for (const subject of ["person=alice@example.com", "person=U12345678", "agent=1234567890", "session=raw-session"]) {
+      const checked = validateEvent({ ...valid, subject }, TELEMETRY_CATALOGUE)
+      assert.equal(checked.ok, false, subject)
+      if (!checked.ok) assert.match(checked.problems.join("\n"), /is not a pseudonym starting with/)
+      assert.throws(() => eventOfWith(definition, { subject: { person: subject.slice(subject.indexOf("=") + 1) } }), /pseudonym/)
+    }
+    const hex = "a".repeat(32)
+    assert.equal(validateEvent({ ...valid, subject: `agent=agent_${hex};session=session_${hex}` }, TELEMETRY_CATALOGUE).ok, true)
   })
 
   test("a malformed envelope, before the catalogue is reached", () => {

@@ -84,7 +84,7 @@ var TELEMETRY_CATALOGUE = Object.freeze([
     type: "plugin.refused",
     version: 1,
     class: "audit",
-    note: "A call was refused before it reached the provider, with the code that explains why.",
+    note: "A call was refused before it reached the provider; `outcome` is the contract's error-table code that explains why.",
     fields: CALL_FIELDS
   }),
   declared({
@@ -177,6 +177,10 @@ function parseSubject(subject) {
     }
     if (decoded === "" || /[\u0000-\u001f\u007f]/.test(decoded)) {
       problems.push(`subject.${key}: is not a non-empty id`);
+      continue;
+    }
+    if (key !== "trace" && !new RegExp(`^${key}_[A-Za-z0-9_-]{8,128}$`).test(decoded)) {
+      problems.push(`subject.${key}: is not a pseudonym starting with ${key}_`);
       continue;
     }
     value[key] = decoded;

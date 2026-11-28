@@ -100,5 +100,19 @@ export interface RpcRegistration {
     };
     dispose(): Promise<void>;
 }
+/** The part of a context the rule lookup reads: both doors have it, and the gate stays the authority. */
+export interface RulesContext {
+    readonly session: RpcContext["session"];
+    readonly agent: RpcContext["agent"];
+}
+/** The session's agent and rules: the agent's, then the session's, as OpenCode reads them. */
+export declare function rulesOf(context: RulesContext, sessionID: string): Promise<{
+    readonly agent: string;
+    readonly rules: readonly {
+        readonly action: string;
+        readonly resource: string;
+        readonly effect: "allow" | "deny" | "ask";
+    }[];
+}>;
 /** The RPC definition and handlers, and the one registration that carries the bus events. */
 export declare function installRpc(context: RpcContext, environment: CallEnvironment, level: AccessLevel, wiring: GrantWiring | undefined, bus: BusReader): Promise<RpcRegistration>;

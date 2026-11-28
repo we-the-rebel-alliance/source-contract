@@ -58,6 +58,7 @@ bundles only what it imports.
 | `access` | plugin | the three access levels as permission rules, and the fences a grant compiles to | [access](docs/access.md) |
 | `register` | plugin | doors 1–3 from one handler table, with input, account, permission and output checks | [register](docs/register.md) |
 | `events` | plugin | the event and page model, normaliser, hash, secret screening and the error table | [events](docs/events.md) |
+| `telemetry` | plugin | the CloudEvents event envelope, the plugin event catalogue and a local event log | [telemetry](docs/telemetry.md) |
 | `cursor` | plugin | the opaque cursor, bound to plugin, source, account and scope | [cursor](docs/cursor.md) |
 | `bus` | plugin | typed `changed`, `status` and `account` nudges, and the reader that decodes them | [bus](docs/bus.md) |
 | `grant` | plugin | the host-signed, single-use action grant: signer, verifier and codes | [grant](docs/grant.md) |

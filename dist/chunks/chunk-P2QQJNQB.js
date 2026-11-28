@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   toJSONSchema
-} from "./chunk-4YITQAYJ.js";
+} from "./chunk-AYJEC7Y2.js";
 
 // src/internal/validator.ts
 function pathText(path) {

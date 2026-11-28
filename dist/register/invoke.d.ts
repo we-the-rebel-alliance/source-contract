@@ -4,6 +4,7 @@ import type { Bus } from "../bus.js";
 import { type Manifest } from "../manifest.js";
 import { type PlanReservation, type PlanStore } from "./plans.js";
 import { type Door, type HandlerTable, type MethodCall, type MethodEntry } from "./handlers.js";
+import type { RegisterTelemetry } from "./telemetry.js";
 /** The environment one call runs in, resolved once by `register`. */
 export interface CallEnvironment {
     readonly name: string;
@@ -18,6 +19,8 @@ export interface CallEnvironment {
     readonly access: AccessRegistration;
     /** The host's agents as they are when the call asks, so status reads no state kept at setup. */
     readonly agents: () => Promise<readonly AgentLike[]>;
+    /** The one recorder every door writes its call's event through. */
+    readonly telemetry: RegisterTelemetry;
 }
 /**
  * The one bus writer, read when a handler runs. `register` creates it from its single RPC registration, which exists
@@ -26,7 +29,7 @@ export interface CallEnvironment {
  */
 export type BusReader = () => Bus;
 /** The handler table and account set, validated once at setup. */
-export declare function prepare(manifest: Manifest, handlers: HandlerTable, accounts: readonly AccountProfile[], access: AccessRegistration, agents: () => Promise<readonly AgentLike[]>): CallEnvironment;
+export declare function prepare(manifest: Manifest, handlers: HandlerTable, accounts: readonly AccountProfile[], access: AccessRegistration, agents: () => Promise<readonly AgentLike[]>, telemetry: RegisterTelemetry): CallEnvironment;
 /** A call's input and the account it resolves to, before any handler runs. */
 export interface PreparedCall {
     readonly input: Record<string, unknown>;

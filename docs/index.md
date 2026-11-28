@@ -20,6 +20,7 @@ describes the entry point a plugin or an app imports.
 - [access](access.md): the three access levels as permission rules, and the fenced sessions a grant compiles to.
 - [register](register.md): doors 1–3 from one handler table, with input, account, permission and output checks.
 - [events](events.md): the event and page model, the normaliser, hash, secret screening and the error table.
+- [telemetry](telemetry.md): the CloudEvents event envelope, the plugin event catalogue and the local event log.
 - [cursor](cursor.md): the opaque cursor codec, bound to plugin, source, account and scope.
 - [bus](bus.md): typed `changed`, `status` and `account` nudges a handler emits on `call.bus`, and the reader.
 - [grant](grant.md): the host-signed, single-use action grant — format, signer, verifier and every code.

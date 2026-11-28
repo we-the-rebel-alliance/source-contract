@@ -1,18 +1,21 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
+  TELEMETRY_EVENT_SCHEMA
+} from "./chunks/chunk-5QNU63MF.js";
+import {
   HINT_SCHEMA
-} from "./chunks/chunk-YBCGJKUX.js";
+} from "./chunks/chunk-CAO5NJGO.js";
 import {
   AUDIT_SCHEMA
-} from "./chunks/chunk-AR2AU7W4.js";
+} from "./chunks/chunk-XAHXHRTU.js";
 import "./chunks/chunk-UP4MI2EO.js";
-import "./chunks/chunk-QRQ6DMVY.js";
+import "./chunks/chunk-AMT4OSAU.js";
 import {
   MANIFEST_SCHEMA
-} from "./chunks/chunk-SLJRXAP6.js";
+} from "./chunks/chunk-YOSR7DZV.js";
 import {
   OUTPUTS
-} from "./chunks/chunk-7N2GP7UG.js";
+} from "./chunks/chunk-UY2FWVSQ.js";
 import {
   ATTENDANCE_RESPONSES,
   COMMITMENT_STATES,
@@ -21,16 +24,16 @@ import {
 import "./chunks/chunk-7KJXMIQH.js";
 import {
   validator
-} from "./chunks/chunk-FTEX4OOT.js";
+} from "./chunks/chunk-P2QQJNQB.js";
 import "./chunks/chunk-M7EFVHR5.js";
-import "./chunks/chunk-OJKZGBMB.js";
+import "./chunks/chunk-CCSPDV3H.js";
 import {
   _enum,
   boolean,
   literal,
   object,
   string
-} from "./chunks/chunk-4YITQAYJ.js";
+} from "./chunks/chunk-AYJEC7Y2.js";
 import "./chunks/chunk-WLRWVIVP.js";
 
 // src/internal/schema/facts.ts
@@ -68,7 +71,14 @@ var FACT_SCHEMAS = {
 };
 
 // src/schemas.ts
-var SCHEMAS = [MANIFEST_SCHEMA, ...Object.values(OUTPUTS), ...Object.values(FACT_SCHEMAS), HINT_SCHEMA, AUDIT_SCHEMA];
+var SCHEMAS = [
+  MANIFEST_SCHEMA,
+  ...Object.values(OUTPUTS),
+  ...Object.values(FACT_SCHEMAS),
+  HINT_SCHEMA,
+  AUDIT_SCHEMA,
+  TELEMETRY_EVENT_SCHEMA
+];
 export {
   SCHEMAS
 };

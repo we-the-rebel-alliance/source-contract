@@ -1,7 +1,7 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
   fromJSONSchema
-} from "./chunk-4YITQAYJ.js";
+} from "./chunk-AYJEC7Y2.js";
 
 // src/accounts/alias.ts
 var DEFAULT_ALIAS = "default";

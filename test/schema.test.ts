@@ -7,6 +7,7 @@ import { MANIFEST_SCHEMA } from "../src/manifest.ts"
 import { OUTPUTS } from "../src/outputs.ts"
 import { FACT_SCHEMAS } from "../src/internal/schema/facts.ts"
 import { SCHEMAS } from "../src/schemas.ts"
+import { TELEMETRY_EVENT_SCHEMA } from "../src/telemetry.ts"
 
 describe("the published schema bundle", () => {
   test("every schema has a name a file can carry, and a JSON Schema", () => {
@@ -19,11 +20,12 @@ describe("the published schema bundle", () => {
     }
   })
 
-  test("the manifest, the output shapes, the facts, the hint file and the audit report are the bundle", () => {
+  test("the manifest, the output shapes, the facts, the hint file, the audit report and the telemetry envelope are the bundle", () => {
     const names = new Set(SCHEMAS.map((schema) => schema.name))
     assert.ok(names.has(MANIFEST_SCHEMA.name))
     assert.ok(names.has(HINT_SCHEMA.name))
     assert.ok(names.has(AUDIT_SCHEMA.name))
+    assert.ok(names.has(TELEMETRY_EVENT_SCHEMA.name))
     for (const output of Object.values(OUTPUTS)) assert.ok(names.has(output.name), output.name)
     for (const fact of Object.values(FACT_SCHEMAS)) assert.ok(names.has(fact.name), fact.name)
     // The old v0.3 `sources` block is gone: capabilities is the one manifest.

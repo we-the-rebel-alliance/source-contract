@@ -42,8 +42,6 @@ export interface RegisterTelemetry {
  * `XDG_DATA_HOME` is respected, as OpenCode respects it; otherwise the root is `~/.local/share`.
  */
 export declare function defaultEventLogPath(name: string): string;
-/** The account a call names, or `default` before the register resolves one. */
-export declare function accountOf(value: unknown): string;
 /**
  * Build the recorder for one registration. It creates the log once; a path it cannot use leaves telemetry off, and no
  * call fails because of it.

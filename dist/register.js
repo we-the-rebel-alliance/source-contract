@@ -486,84 +486,6 @@ function toolCall(context, door) {
   return { sessionID: context.sessionID, agent: context.agent, messageID: context.messageID, id: context.id, signal: context.signal, progress: context.progress, door };
 }
 
-// src/register/telemetry.ts
-import { createHash } from "node:crypto";
-import { homedir } from "node:os";
-import { join } from "node:path";
-function defaultEventLogPath(name) {
-  const data = process.env["XDG_DATA_HOME"] || join(homedir(), ".local", "share");
-  return join(data, "opencode", "plugin-data", name, "events.jsonl");
-}
-var plain4 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-function pseudonym(kind, value) {
-  const text = value.trim() === "" ? "unknown" : value;
-  return `${kind}_${createHash("sha256").update(`${kind}\0${text}`).digest("hex").slice(0, 32)}`;
-}
-function accountOf(value) {
-  return plain4(value) && typeof value["account"] === "string" && value["account"] !== "" ? value["account"] : "default";
-}
-function safeText(value, fallback) {
-  const text = value.trim() === "" ? fallback : value;
-  return secretKinds(text).length > 0 ? "redacted" : text;
-}
-function countOf(value) {
-  return plain4(value) && Array.isArray(value["events"]) ? value["events"].length : 0;
-}
-function costOf(value) {
-  if (!plain4(value) || !plain4(value["cost"])) return void 0;
-  const usd = value["cost"]["usd"];
-  return typeof usd === "number" && Number.isFinite(usd) && usd >= 0 ? usd : void 0;
-}
-function successType(entry) {
-  if (entry.item.plans === true) return "plugin.plan";
-  return entry.item.class === "read" ? "plugin.read" : "plugin.commit";
-}
-function createRegisterTelemetry(manifest, wiring) {
-  const name = manifest.plugin.name;
-  const source = {
-    component: name,
-    version: safeText(wiring?.version ?? "", "unknown"),
-    deployment: safeText(wiring?.deployment ?? "", "local")
-  };
-  let log;
-  try {
-    log = createEventLog({ path: wiring?.path ?? defaultEventLogPath(name) });
-  } catch {
-    log = void 0;
-  }
-  return {
-    record(call) {
-      if (log === void 0) return;
-      try {
-        const type = call.outcome === "ok" ? successType(call.entry) : "plugin.refused";
-        const fields = {
-          method: call.entry.name,
-          method_class: call.entry.item.class,
-          effect: call.entry.item.effect ?? "none",
-          account: safeText(call.trace.account, "default"),
-          consumer: safeText(call.trace.consumer, "unknown"),
-          allowed_by: call.trace.allowedBy,
-          outcome: call.outcome,
-          duration_ms: Math.max(0, Math.round(call.durationMs))
-        };
-        if (type === "plugin.read") {
-          fields["count"] = countOf(call.value);
-          const cost = costOf(call.value);
-          if (cost !== void 0) fields["cost_usd"] = cost;
-        }
-        const event = createEvent({
-          type,
-          source,
-          subject: { agent: pseudonym("agent", call.trace.agent), session: pseudonym("session", call.trace.sessionID) },
-          fields
-        });
-        log.append(event);
-      } catch {
-      }
-    }
-  };
-}
-
 // src/register/rpc.ts
 var FAILED = {
   type: "object",
@@ -571,7 +493,7 @@ var FAILED = {
   required: ["code", "next"],
   additionalProperties: false
 };
-var plain5 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var plain4 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 function strictEnvelope(input) {
   const schema = {
     type: "object",
@@ -650,18 +572,18 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
   const trace = {
     sessionID: "unknown",
     agent: "unknown",
-    account: accountOf(plain5(raw) ? raw["input"] : void 0),
+    account: "unknown",
     consumer: "unknown",
     allowedBy: "none"
   };
   const started = performance.now();
   try {
-    if (!plain5(raw)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope must be an object", `Pass {"sessionID":"<session>","input":<the method's input>}.`));
+    if (!plain4(raw)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope must be an object", `Pass {"sessionID":"<session>","input":<the method's input>}.`));
     const sessionID = raw["sessionID"];
     if (typeof sessionID !== "string" || sessionID === "") throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope needs a sessionID", "Pass the session the call runs as."));
     trace.sessionID = sessionID;
     const input = raw["input"];
-    if (!plain5(input)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope needs an input object", "Pass the method's input as the envelope's input."));
+    if (!plain4(input)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope needs an input object", "Pass the method's input as the envelope's input."));
     const resolved = await rulesOf(context, sessionID);
     trace.agent = resolved.agent;
     trace.consumer = typeof raw["consumer"] === "string" && raw["consumer"] !== "" ? raw["consumer"] : resolved.agent;
@@ -789,19 +711,25 @@ function toolRegistrations(environment, context, bus) {
       const trace = {
         sessionID: callContext.sessionID,
         agent: callContext.agent,
-        account: accountOf(raw),
+        account: "unknown",
         consumer: callContext.agent.trim() === "" ? "unknown" : callContext.agent,
         allowedBy: "none"
       };
       const started = performance.now();
+      let effect = "allow";
       try {
         prepared = prepareCall(entry, raw, environment.accounts, environment.plans);
         trace.account = prepared.account;
+        try {
+          const resolved = await rulesOf(context, callContext.sessionID);
+          effect = callEffect(environment.name, entry, prepared.account, resolved.rules);
+        } catch {
+        }
         await gate(context, environment.name, entry, callContext, prepared.account, {
           save: true,
           source: { type: "tool", messageID: callContext.messageID, id: callContext.id }
         });
-        trace.allowedBy = entry.item.class === "read" ? "rule" : "ask";
+        trace.allowedBy = effect === "ask" ? "ask" : "rule";
         const value = await execute(environment, entry, prepared, toolCall(callContext, door), bus);
         environment.telemetry.record({ entry, door, trace, outcome: "ok", durationMs: performance.now() - started, value });
         return { output: value, content: textOf(value) };
@@ -821,6 +749,85 @@ async function installTools(context, environment, bus) {
     editor.namespace({ name: environment.name, description: environment.manifest.plugin.summary });
     for (const tool of tools) editor.add(tool);
   });
+}
+
+// src/register/telemetry.ts
+import { createHash } from "node:crypto";
+import { homedir } from "node:os";
+import { join } from "node:path";
+function defaultEventLogPath(name) {
+  const data = process.env["XDG_DATA_HOME"] || join(homedir(), ".local", "share");
+  return join(data, "opencode", "plugin-data", name, "events.jsonl");
+}
+var plain5 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+function pseudonym(kind, value) {
+  const text = value.trim() === "" ? "unknown" : value;
+  return `${kind}_${createHash("sha256").update(`${kind}\0${text}`).digest("hex").slice(0, 32)}`;
+}
+var SAFE_TEXT_MAX = 128;
+function safeText(value, fallback) {
+  const text = value.trim() === "" ? fallback : value;
+  if (secretKinds(text).length > 0) return "redacted";
+  const plainText = text.replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
+  if (plainText === "") return fallback;
+  return plainText.length > SAFE_TEXT_MAX ? plainText.slice(0, SAFE_TEXT_MAX) : plainText;
+}
+function countOf(value) {
+  return plain5(value) && Array.isArray(value["events"]) ? value["events"].length : 0;
+}
+function costOf(value) {
+  if (!plain5(value) || !plain5(value["cost"])) return void 0;
+  const usd = value["cost"]["usd"];
+  return typeof usd === "number" && Number.isFinite(usd) && usd >= 0 ? usd : void 0;
+}
+function successType(entry) {
+  if (entry.item.plans === true) return "plugin.plan";
+  return entry.item.class === "read" ? "plugin.read" : "plugin.commit";
+}
+function createRegisterTelemetry(manifest, wiring) {
+  const name = manifest.plugin.name;
+  const source = {
+    component: name,
+    version: safeText(wiring?.version ?? "", "unknown"),
+    deployment: safeText(wiring?.deployment ?? "", "local")
+  };
+  let log;
+  try {
+    log = createEventLog({ path: wiring?.path ?? defaultEventLogPath(name) });
+  } catch {
+    log = void 0;
+  }
+  return {
+    record(call) {
+      if (log === void 0) return;
+      try {
+        const type = call.outcome === "ok" ? successType(call.entry) : "plugin.refused";
+        const fields = {
+          method: call.entry.name,
+          method_class: call.entry.item.class,
+          effect: call.entry.item.effect ?? "none",
+          account: safeText(call.trace.account, "default"),
+          consumer: safeText(call.trace.consumer, "unknown"),
+          allowed_by: call.trace.allowedBy,
+          outcome: call.outcome,
+          duration_ms: Math.max(0, Math.round(call.durationMs))
+        };
+        if (type === "plugin.read") {
+          fields["count"] = countOf(call.value);
+          const cost = costOf(call.value);
+          if (cost !== void 0) fields["cost_usd"] = cost;
+        }
+        const event = createEvent({
+          type,
+          source,
+          subject: { agent: pseudonym("agent", call.trace.agent), session: pseudonym("session", call.trace.sessionID) },
+          fields
+        });
+        log.append(event);
+      } catch {
+      }
+    }
+  };
 }
 
 // src/bus/writer.ts

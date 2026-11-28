@@ -1,4 +1,5 @@
 import { type BusReader, type CallEnvironment } from "./invoke.js";
+import { type RpcContext } from "./rpc.js";
 /** The tool context an executor receives, as much of OpenCode's `ToolContext` as this module uses. */
 export interface ToolCallContext {
     readonly sessionID: string;
@@ -54,6 +55,9 @@ export interface ToolContext {
             };
         }): Promise<void>;
     };
+    /** The session and agent the call runs as, read only to name the rule the gate evaluated. */
+    readonly session: RpcContext["session"];
+    readonly agent: RpcContext["agent"];
     /** The editor is `unknown` here because the host's `ToolEditor.add` is generic over each schema type; `installTools`
      * narrows it to `ToolEditor`, exactly as the accounts module narrows its transforms. */
     readonly tool: {

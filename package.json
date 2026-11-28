@@ -103,6 +103,10 @@
       "types": "./dist/schemas.d.ts",
       "default": "./dist/schemas.js"
     },
+    "./telemetry": {
+      "types": "./dist/telemetry.d.ts",
+      "default": "./dist/telemetry.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

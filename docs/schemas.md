@@ -10,16 +10,16 @@ for (const schema of SCHEMAS) console.log(schema.name, schema.jsonSchema())
 ```
 
 The bundle holds the manifest (`capabilities.json`), every registry output (`output.<name>.json`), the core fact types
-(`fact.<type>.json`), the hint frontmatter (`hint.json`) and the audit report (`audit.json`). A module that adds a
-validator adds it to `SCHEMAS` in `src/schemas.ts`, and the build writes its JSON Schema; the JSON Schema is generated
-from the zod source of truth, never written by hand.
+(`fact.<type>.json`), the hint frontmatter (`hint.json`), the audit report (`audit.json`) and the telemetry envelope
+(`telemetry.event.json`). A module that adds a validator adds it to `SCHEMAS` in `src/schemas.ts`, and the build writes
+its JSON Schema; the JSON Schema is generated from the zod source of truth, never written by hand.
 
 A consumer that validates a value itself reads the same JSON Schema from this bundle; one that renders an output reads
-it from the registry in `outputs`. See [manifest](manifest.md), [outputs](outputs.md), [hints](hints.md) and
-[audit](audit.md).
+it from the registry in `outputs`. See [manifest](manifest.md), [outputs](outputs.md), [hints](hints.md),
+[audit](audit.md) and [telemetry](telemetry.md).
 
 ## Exports
 
 | Export | Does |
 |---|---|
-| `SCHEMAS` | every published validator, in bundle order: the manifest, the outputs, the facts, the hint and the audit report |
+| `SCHEMAS` | every published validator, in bundle order: the manifest, the outputs, the facts, the hint, the audit report and the telemetry envelope |

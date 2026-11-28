@@ -6,7 +6,7 @@ import {
   checkBusData,
   holdsSecret,
   serialise
-} from "./chunks/chunk-DTQJCQ7P.js";
+} from "./chunks/chunk-ZTHCSHA4.js";
 import {
   verifyGrant
 } from "./chunks/chunk-EGSVFMLE.js";
@@ -16,11 +16,11 @@ import {
   evaluate,
   methodAction,
   unguardedAgents
-} from "./chunks/chunk-QRQ6DMVY.js";
+} from "./chunks/chunk-AMT4OSAU.js";
 import {
   manifestHash
-} from "./chunks/chunk-SLJRXAP6.js";
-import "./chunks/chunk-7N2GP7UG.js";
+} from "./chunks/chunk-YOSR7DZV.js";
+import "./chunks/chunk-UY2FWVSQ.js";
 import {
   MAX_BYTES_DEFAULT,
   errorCodeOf,
@@ -29,14 +29,14 @@ import {
 import "./chunks/chunk-7KJXMIQH.js";
 import {
   problemsOf
-} from "./chunks/chunk-FTEX4OOT.js";
+} from "./chunks/chunk-P2QQJNQB.js";
 import "./chunks/chunk-M7EFVHR5.js";
 import {
   DEFAULT_ALIAS,
   accountsOf,
   redactReason,
   resolveAccount
-} from "./chunks/chunk-OJKZGBMB.js";
+} from "./chunks/chunk-CCSPDV3H.js";
 import {
   array,
   fromJSONSchema,
@@ -45,7 +45,7 @@ import {
   strictObject,
   string,
   unknown
-} from "./chunks/chunk-4YITQAYJ.js";
+} from "./chunks/chunk-AYJEC7Y2.js";
 import "./chunks/chunk-WLRWVIVP.js";
 
 // src/register/rpc.ts

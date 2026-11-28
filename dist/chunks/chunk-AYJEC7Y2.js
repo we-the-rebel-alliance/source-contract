@@ -9440,6 +9440,7 @@ export {
   record,
   _enum,
   literal,
+  json,
   iso_exports,
   fromJSONSchema
 };

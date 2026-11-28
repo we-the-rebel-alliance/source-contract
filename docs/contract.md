@@ -326,6 +326,7 @@ Remote apps can't read the disk, and RPC is untrusted for manifests. The **catal
 | `access` | plugin | default rules from `access` and `methods` |
 | `register` | plugin | doors 1–3 from one handler table |
 | `events` | plugin | event normaliser, hash, screening, page building |
+| `telemetry` | plugin | the CloudEvents event envelope, the plugin catalogue and the local event log |
 | `cursor` | plugin | bound cursor codec |
 | `bus` | plugin | typed `changed`, `status`, `account` emitters |
 | `grant` | plugin | action-grant verifier (#40) |
@@ -378,3 +379,44 @@ Remote apps can't read the disk, and RPC is untrusted for manifests. The **catal
 | `accounts.named`, `accounts.server` | `accounts.via`, profiles, one naming rule |
 | App-named hints and routines | generic `hints` for any model-based consumer; routines belong to the consumer |
 | `service` (PR #49), `orgs` (#44), `methods` (#44), thumbnail (#42), grant verifier (#40) | built in from v0.0.0 |
+
+## 19. Telemetry
+
+Every plugin captures its events in the one envelope, into a local and durable log first (rule 1.4, decision 0005,
+decision 0017). The `telemetry` module carries the envelope, the contract's catalogue and the log. It captures; it does
+not export: each deployment chooses where the events go.
+
+The envelope is CloudEvents 1.0:
+
+| Field | Holds |
+|---|---|
+| `specversion` | `1.0` |
+| `id` | a unique id |
+| `time` | when it happened, as an ISO 8601 UTC time |
+| `type` | the event's name and version in the catalogue, such as `plugin.read.v1` |
+| `source` | `plugin://<component>/<version>/<deployment>` |
+| `subject` | pseudonymous ids, as `person=…;agent=…;session=…;trace=…` |
+| `traceparent` | the W3C trace context, when the work has a trace |
+| `datacontenttype` | `application/json` |
+| `data` | the event's fields, each `{ class, value }` |
+
+A field's class is `metadata` (a fact about the call), `personal` (a person's data) or `content` (text a person or a
+provider wrote). An event's class is `event`, or `audit` for what records who did what, with which rights. The catalogue
+declares both, never the caller:
+
+| Type | When |
+|---|---|
+| `plugin.read` | a read returned, with the count of events and, when the provider reports it, the cost |
+| `plugin.plan` | a planning call returned a plan, without writing anything |
+| `plugin.commit` | a commit ran the plan it was given |
+| `plugin.refused` | a call was refused before it reached the provider, with the code that explains why |
+| `account.signed_in` | an account signed in and became ready |
+| `account.signed_out` | an account signed out |
+| `account.needs_sign_in` | an account needs a person to sign in again |
+
+Every type is versioned. A changed field or meaning is a new version, so a reader never guesses. `validateEvent(event,
+catalogue)` refuses an unknown type, a missing field, a field the catalogue does not declare (so it has no class), a
+field whose class differs from the catalogue's, a malformed `traceparent` or a subject trace that differs from it, and
+any value the secret screen flags. `createEventLog({ path })` appends and fsyncs one JSON line per event, screens every
+event before writing, and never throws into the caller; a log that cannot be written leaves the plugin's call unchanged.
+The log does not rotate, retain or export: those are the deployment's choices, and the deployment's exporter reads it.

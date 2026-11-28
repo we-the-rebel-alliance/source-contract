@@ -2,7 +2,7 @@
 import {
   isExtensionOutput,
   isOutputName
-} from "./chunk-7N2GP7UG.js";
+} from "./chunk-UY2FWVSQ.js";
 import {
   ACCOUNT_MECHANISMS,
   ACTION_EFFECTS,
@@ -41,7 +41,7 @@ import {
   string,
   toJSONSchema,
   unknown
-} from "./chunk-4YITQAYJ.js";
+} from "./chunk-AYJEC7Y2.js";
 
 // src/manifest/canonical.ts
 import { createHash } from "node:crypto";

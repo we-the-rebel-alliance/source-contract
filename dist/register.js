@@ -522,8 +522,8 @@ function createRegisterTelemetry(manifest, wiring) {
   const name = manifest.plugin.name;
   const source = {
     component: name,
-    version: wiring?.version?.trim() || "unknown",
-    deployment: wiring?.deployment?.trim() || "local"
+    version: safeText(wiring?.version ?? "", "unknown"),
+    deployment: safeText(wiring?.deployment ?? "", "local")
   };
   let log;
   try {

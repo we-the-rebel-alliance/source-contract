@@ -114,8 +114,8 @@ export function createRegisterTelemetry(manifest: Manifest, wiring: TelemetryWir
   const name = manifest.plugin.name
   const source: TelemetrySource = {
     component: name,
-    version: wiring?.version?.trim() || "unknown",
-    deployment: wiring?.deployment?.trim() || "local",
+    version: safeText(wiring?.version ?? "", "unknown"),
+    deployment: safeText(wiring?.deployment ?? "", "local"),
   }
   let log: EventLog | undefined
   try {

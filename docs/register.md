@@ -208,6 +208,36 @@ Every failure reads `CODE: What happened. Next step: What to do.` (contract §12
 code the table does not hold is `UNAVAILABLE`. A sign-in failure must use `NEEDS_SIGN_IN`; an older transport's
 `AUTH_REQUIRED` is not a contract code and is reported as `UNAVAILABLE`.
 
+## Telemetry
+
+Every call through doors 1 and 3 writes one event in the contract's envelope (§19), before the door answers:
+
+| Event | When |
+|---|---|
+| `plugin.read` | a read returned |
+| `plugin.plan` | a planning call returned a plan |
+| `plugin.commit` | a commit, or another non-read method, ran |
+| `plugin.refused` | the call did not return, with the contract code that refused it |
+
+The event carries the method, its class and effect, the account alias, the consumer, `allowed_by` (`grant`, `ask`,
+`rule` or `none`), the outcome (`ok` or the code), and the duration. A `plugin.read` also carries the number of events
+the page returned (zero when the answer has no page) and, when the provider reports it, its `cost.usd`.
+
+`register` never writes a tool's input or answer, provider text, a credential or a grant. The subject holds pseudonymous
+agent and session ids, never the raw ids.
+
+The log is local JSON Lines: `wiring.telemetry.path` when the host gives one, otherwise
+`$XDG_DATA_HOME/opencode/plugin-data/<name>/events.jsonl`, or `~/.local/share/opencode/plugin-data/<name>/events.jsonl`
+when `XDG_DATA_HOME` is unset. The source names the plugin, `wiring.telemetry.version` (default `unknown`) and
+`wiring.telemetry.deployment` (default `local`). A log that cannot be written is skipped, and the call's answer is
+unchanged:
+
+```ts
+const registration = await register(ctx, manifest, handlers, {
+  telemetry: { path: "/var/lib/slack-plugin/events.jsonl", version: packageVersion, deployment: "work" },
+})
+```
+
 ## OpenCode 2.4.1 types
 
 The register uses only the public plugin context (`@opencode/plugin` 2.4.1): `Plugin.Context.agent`, `.tool`, `.rpc`,
@@ -224,7 +254,7 @@ registration follows `ToolEditor.add` and `Tool.Options.codemode` (`dist/promise
 |---|---|
 | `register` | doors 1–3 from one handler table, a manifest and the optional grant wiring; the registration carries the bus writer |
 | `assertHost`, `HostContext` | the host gate: `ctx.app.version` against the manifest's range, refusing `HOST_UNTESTED` |
-| `RegisterContext`, `RegisterWiring`, `Registration`, `GrantWiring` | the context it takes, the grant wiring, and what it returns (its `bus` and its disposer) |
+| `RegisterContext`, `RegisterWiring`, `Registration`, `GrantWiring`, `TelemetryWiring` | the context it takes, the grant and telemetry wiring, and what it returns (its `bus` and its disposer) |
 | `methodEntries`, `Door`, `HandlerTable`, `MethodCall`, `MethodEntry`, `MethodHandler` | the handler table and one call's context: `account`, `bus` and `unguardedAgents()` |
 | `COMMIT_INPUT`, `PLAN_OUTPUT`, `PLAN_MAX_BYTES` | the shapes a planning method answers and a commit takes, and the most bytes of JSON a stored plan may take |
 | `refusal`, `refusalOf`, `RegisterError`, `Refusal` | a handler's own refusal, in the contract's form |

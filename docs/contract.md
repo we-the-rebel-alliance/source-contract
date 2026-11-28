@@ -420,3 +420,10 @@ field whose class differs from the catalogue's, a malformed `traceparent` or a s
 any value the secret screen flags. `createEventLog({ path })` appends and fsyncs one JSON line per event, screens every
 event before writing, and never throws into the caller; a log that cannot be written leaves the plugin's call unchanged.
 The log does not rotate, retain or export: those are the deployment's choices, and the deployment's exporter reads it.
+
+`register` writes one event for every call through doors 1 and 3: `plugin.read` for a read, `plugin.plan` for a
+planning call, `plugin.commit` for an act that ran, and `plugin.refused` for a call that did not return. Its fields are
+the method, its class and effect, the account, the consumer, `allowed_by` (`grant`, `ask`, `rule` or `none`), the
+outcome and the duration, with the read's `count` and, when reported, `cost_usd`. The host may give the log's path on
+`register`'s fourth argument as `telemetry.path`; otherwise it is under the plugin's data directory. A log that cannot
+be written never changes the call's answer.

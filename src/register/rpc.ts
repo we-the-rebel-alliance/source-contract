@@ -26,6 +26,7 @@ import { callEffect, gate } from "./assertions.ts"
 import { permissionRefusal, refusal, refusalOf, RegisterError, type Refusal } from "./errors.ts"
 import type { MethodEntry } from "./handlers.ts"
 import { execute, prepareCall, type BusReader, type CallEnvironment } from "./invoke.ts"
+import { accountOf, type CallTrace } from "./telemetry.ts"
 import { validate } from "./validate.ts"
 
 /** The envelope's failure, as the RPC declares it: the code and the next step beside the message. */
@@ -215,13 +216,24 @@ async function invoke(
   bus: BusReader,
 ): Promise<unknown> {
   let prepared: Awaited<ReturnType<typeof prepareCall>> | undefined
+  const trace: CallTrace = {
+    sessionID: "unknown",
+    agent: "unknown",
+    account: accountOf(plain(raw) ? raw["input"] : undefined),
+    consumer: "unknown",
+    allowedBy: "none",
+  }
+  const started = performance.now()
   try {
     if (!plain(raw)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope must be an object", 'Pass {"sessionID":"<session>","input":<the method\'s input>}.'))
     const sessionID = raw["sessionID"]
     if (typeof sessionID !== "string" || sessionID === "") throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope needs a sessionID", "Pass the session the call runs as."))
+    trace.sessionID = sessionID
     const input = raw["input"]
     if (!plain(input)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope needs an input object", "Pass the method's input as the envelope's input."))
     const resolved = await rulesOf(context, sessionID)
+    trace.agent = resolved.agent
+    trace.consumer = typeof raw["consumer"] === "string" && raw["consumer"] !== "" ? raw["consumer"] : resolved.agent
     const nonRead = entry.item.class !== "read"
     // A method's own `effect: "deny"` is final for every class, a read too: a fenced session allows the method, and that
     // allow must never override a method the plugin turned off. The level's own refusals stay below, so each message
@@ -232,6 +244,7 @@ async function invoke(
     const callID = `rpc:${randomUUID()}`
     let gated = false
     let fresh = false
+    let readAllowedBy: "ask" | "rule" = "rule"
     if (nonRead) {
       // The plugin's own setting is final: a caller's session rules can narrow it, never widen it (contract §13).
       if (level === "read-only") {
@@ -242,6 +255,7 @@ async function invoke(
         // A commit resolves its plan's account first, so the grant must name that account; a grant for another account
         // is ACCOUNT_MISMATCH, not a silent run as the first alias.
         prepared = prepareCall(entry, input, environment.accounts, environment.plans)
+        trace.account = prepared.account
         const checked = await verify(environment, wiring, raw, entry, prepared.account)
         if (!checked.ok) {
           const failure =
@@ -254,9 +268,11 @@ async function invoke(
         if (callEffect(environment.name, entry, prepared.account, resolved.rules) === "deny") {
           throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is denied for this session's agent`, "Use a session whose agent allows it."))
         }
+        trace.allowedBy = "grant"
         gated = true
       } else {
         prepared = prepareCall(entry, input, environment.accounts, environment.plans)
+        trace.account = prepared.account
         const effect = callEffect(environment.name, entry, prepared.account, resolved.rules)
         if (effect === "allow") {
           // An allow rule is not a confirmation. Run the gate first so it is the one permission evaluation, then refuse.
@@ -268,6 +284,8 @@ async function invoke(
       }
     } else {
       prepared = prepareCall(entry, input, environment.accounts, environment.plans)
+      trace.account = prepared.account
+      readAllowedBy = callEffect(environment.name, entry, prepared.account, resolved.rules) === "ask" ? "ask" : "rule"
     }
     if (prepared === undefined) throw new RegisterError(refusal("UNAVAILABLE", "the RPC call prepared no input", "Try again; if it keeps failing, check the plugin's status."))
     if (!gated) {
@@ -279,6 +297,7 @@ async function invoke(
         // The evaluate hook reads `freshAsks`: for a fresh ask it turns an allow that came only from a saved approval
         // back into ask. The source is on every ask, so a cancellation can always find the request it opened.
         await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID, signal: rpc.signal }, prepared.account, { save: false, source })
+        trace.allowedBy = nonRead ? "ask" : readAllowedBy
       } catch (error) {
         throw new RegisterError(permissionRefusal(error, `${environment.name}.${entry.name}`))
       } finally {
@@ -288,12 +307,15 @@ async function invoke(
     const messageID = "msg_rpc"
     const id = `rpc:${randomUUID()}`
     const value = await execute(environment, entry, prepared, { sessionID, agent: resolved.agent, messageID, id, signal: rpc.signal, progress: async () => {}, door: "rpc" }, bus)
-    return value === undefined ? null : JSON.parse(JSON.stringify(value))
+    const answer = value === undefined ? null : JSON.parse(JSON.stringify(value))
+    environment.telemetry.record({ entry, door: "rpc", trace, outcome: "ok", durationMs: performance.now() - started, value: answer })
+    return answer
   } catch (error) {
     // A refusal before the handler releases the plan; after the handler starts, consume already made this a no-op.
     if (prepared?.reservation !== undefined) environment.plans.release(prepared.reservation)
     const own = refusalOf(error)
     const failure = own ?? refusal("UNAVAILABLE", "the RPC call failed", "Try again; if it keeps failing, check the plugin's status.")
+    environment.telemetry.record({ entry, door: "rpc", trace, outcome: failure.code, durationMs: performance.now() - started })
     return rpc.error("failed", failure.message, { code: failure.code, next: failure.next })
   }
 }

@@ -14,6 +14,7 @@ import { manifestHash, type Manifest } from "../manifest.ts"
 import { planStore, type PlanReservation, type PlanStore } from "./plans.ts"
 import { refusal, refusalOf, refuse, RegisterError, reasonOf, type Refusal } from "./errors.ts"
 import { methodEntries, type Door, type HandlerTable, type MethodCall, type MethodEntry } from "./handlers.ts"
+import type { RegisterTelemetry } from "./telemetry.ts"
 import { validate, validateCommitInput, validatePlanAnswer } from "./validate.ts"
 
 const plain = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
@@ -32,6 +33,8 @@ export interface CallEnvironment {
   readonly access: AccessRegistration
   /** The host's agents as they are when the call asks, so status reads no state kept at setup. */
   readonly agents: () => Promise<readonly AgentLike[]>
+  /** The one recorder every door writes its call's event through. */
+  readonly telemetry: RegisterTelemetry
 }
 
 /**
@@ -42,8 +45,8 @@ export interface CallEnvironment {
 export type BusReader = () => Bus
 
 /** The handler table and account set, validated once at setup. */
-export function prepare(manifest: Manifest, handlers: HandlerTable, accounts: readonly AccountProfile[], access: AccessRegistration, agents: () => Promise<readonly AgentLike[]>): CallEnvironment {
-  return { name: manifest.plugin.name, manifest, hash: manifestHash(manifest), entries: methodEntries(manifest, handlers), accounts, plans: planStore(), access, agents }
+export function prepare(manifest: Manifest, handlers: HandlerTable, accounts: readonly AccountProfile[], access: AccessRegistration, agents: () => Promise<readonly AgentLike[]>, telemetry: RegisterTelemetry): CallEnvironment {
+  return { name: manifest.plugin.name, manifest, hash: manifestHash(manifest), entries: methodEntries(manifest, handlers), accounts, plans: planStore(), access, agents, telemetry }
 }
 
 /**

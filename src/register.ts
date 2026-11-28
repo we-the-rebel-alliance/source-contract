@@ -15,6 +15,7 @@
  */
 export { register } from "./register/register.ts"
 export type { RegisterContext, RegisterWiring, Registration } from "./register/register.ts"
+export type { TelemetryWiring } from "./register/telemetry.ts"
 export { assertHost } from "./register/host.ts"
 export type { HostContext } from "./register/host.ts"
 export { methodEntries } from "./register/handlers.ts"

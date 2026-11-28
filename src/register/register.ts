@@ -25,6 +25,7 @@ import { installRpc, type GrantWiring, type RpcContext } from "./rpc.ts"
 import { installTools, type ToolContext } from "./tools.ts"
 import { prepare, type BusReader, type CallEnvironment } from "./invoke.ts"
 import type { HandlerTable } from "./handlers.ts"
+import { createRegisterTelemetry, type TelemetryWiring } from "./telemetry.ts"
 import { assertPluginName, type Bus } from "../bus.ts"
 import { createBus } from "../bus/writer.ts"
 
@@ -39,9 +40,11 @@ export interface RegisterContext {
   readonly rpc: RpcContext["rpc"]
 }
 
-/** What a plugin may wire into the register beyond the host context: the action-grant verifier. */
+/** What a plugin may wire into the register beyond the host context: the action-grant verifier and the event log. */
 export interface RegisterWiring {
   readonly grant?: GrantWiring | undefined
+  /** The local event log and its source; the host's path when it gives one. */
+  readonly telemetry?: TelemetryWiring | undefined
 }
 
 /** The live registration: the bus over it, and disposing it removes the tools, the RPC id and the rules. */
@@ -96,7 +99,8 @@ export async function register(context: RegisterContext, manifest: Manifest, han
     throw new Error(access.problems.join("\n"))
   }
   return withCleanup([() => access.dispose()], async () => {
-    const environment: CallEnvironment = prepare(manifest, handlers, accounts, access, async () => (await context.agent.list()).data)
+    const telemetry = createRegisterTelemetry(manifest, wiring.telemetry)
+    const environment: CallEnvironment = prepare(manifest, handlers, accounts, access, async () => (await context.agent.list()).data, telemetry)
     // The RPC registration comes first: the bus wraps its events emitter, and every door reads the one writer. The
     // reader is filled before `register` returns, and no door can run before `setup` returns.
     let bus!: Bus

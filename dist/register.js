@@ -1,5 +1,9 @@
 // @we-the-rebel-alliance/plugin-contract 0.0.0. Built by scripts/build.mjs; do not edit.
 import {
+  createEvent,
+  createEventLog
+} from "./chunks/chunk-5QNU63MF.js";
+import {
   BUS_EVENTS,
   assertPluginName,
   busEvents,
@@ -30,7 +34,9 @@ import "./chunks/chunk-7KJXMIQH.js";
 import {
   problemsOf
 } from "./chunks/chunk-P2QQJNQB.js";
-import "./chunks/chunk-M7EFVHR5.js";
+import {
+  secretKinds
+} from "./chunks/chunk-M7EFVHR5.js";
 import {
   DEFAULT_ALIAS,
   accountsOf,
@@ -369,8 +375,8 @@ function shapes(name, method, item, handler) {
 
 // src/register/invoke.ts
 var plain3 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-function prepare(manifest, handlers, accounts, access, agents) {
-  return { name: manifest.plugin.name, manifest, hash: manifestHash(manifest), entries: methodEntries(manifest, handlers), accounts, plans: planStore(), access, agents };
+function prepare(manifest, handlers, accounts, access, agents, telemetry) {
+  return { name: manifest.plugin.name, manifest, hash: manifestHash(manifest), entries: methodEntries(manifest, handlers), accounts, plans: planStore(), access, agents, telemetry };
 }
 function checkedInput(entry, raw) {
   if (!plain3(raw)) refuse("INPUT_INVALID", `${entry.name} takes an object as its input`, "Pass the input its schema describes.");
@@ -480,6 +486,84 @@ function toolCall(context, door) {
   return { sessionID: context.sessionID, agent: context.agent, messageID: context.messageID, id: context.id, signal: context.signal, progress: context.progress, door };
 }
 
+// src/register/telemetry.ts
+import { createHash } from "node:crypto";
+import { homedir } from "node:os";
+import { join } from "node:path";
+function defaultEventLogPath(name) {
+  const data = process.env["XDG_DATA_HOME"] || join(homedir(), ".local", "share");
+  return join(data, "opencode", "plugin-data", name, "events.jsonl");
+}
+var plain4 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+function pseudonym(kind, value) {
+  const text = value.trim() === "" ? "unknown" : value;
+  return `${kind}_${createHash("sha256").update(`${kind}\0${text}`).digest("hex").slice(0, 32)}`;
+}
+function accountOf(value) {
+  return plain4(value) && typeof value["account"] === "string" && value["account"] !== "" ? value["account"] : "default";
+}
+function safeText(value, fallback) {
+  const text = value.trim() === "" ? fallback : value;
+  return secretKinds(text).length > 0 ? "redacted" : text;
+}
+function countOf(value) {
+  return plain4(value) && Array.isArray(value["events"]) ? value["events"].length : 0;
+}
+function costOf(value) {
+  if (!plain4(value) || !plain4(value["cost"])) return void 0;
+  const usd = value["cost"]["usd"];
+  return typeof usd === "number" && Number.isFinite(usd) && usd >= 0 ? usd : void 0;
+}
+function successType(entry) {
+  if (entry.item.plans === true) return "plugin.plan";
+  return entry.item.class === "read" ? "plugin.read" : "plugin.commit";
+}
+function createRegisterTelemetry(manifest, wiring) {
+  const name = manifest.plugin.name;
+  const source = {
+    component: name,
+    version: wiring?.version?.trim() || "unknown",
+    deployment: wiring?.deployment?.trim() || "local"
+  };
+  let log;
+  try {
+    log = createEventLog({ path: wiring?.path ?? defaultEventLogPath(name) });
+  } catch {
+    log = void 0;
+  }
+  return {
+    record(call) {
+      if (log === void 0) return;
+      try {
+        const type = call.outcome === "ok" ? successType(call.entry) : "plugin.refused";
+        const fields = {
+          method: call.entry.name,
+          method_class: call.entry.item.class,
+          effect: call.entry.item.effect ?? "none",
+          account: safeText(call.trace.account, "default"),
+          consumer: safeText(call.trace.consumer, "unknown"),
+          allowed_by: call.trace.allowedBy,
+          outcome: call.outcome,
+          duration_ms: Math.max(0, Math.round(call.durationMs))
+        };
+        if (type === "plugin.read") {
+          fields["count"] = countOf(call.value);
+          const cost = costOf(call.value);
+          if (cost !== void 0) fields["cost_usd"] = cost;
+        }
+        const event = createEvent({
+          type,
+          source,
+          subject: { agent: pseudonym("agent", call.trace.agent), session: pseudonym("session", call.trace.sessionID) },
+          fields
+        });
+        log.append(event);
+      } catch {
+      }
+    }
+  };
+}
+
 // src/register/rpc.ts
 var FAILED = {
   type: "object",
@@ -487,7 +571,7 @@ var FAILED = {
   required: ["code", "next"],
   additionalProperties: false
 };
-var plain4 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var plain5 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 function strictEnvelope(input) {
   const schema = {
     type: "object",
@@ -563,13 +647,24 @@ async function verify(environment, wiring, request, entry, account) {
 }
 async function invoke(context, environment, level, entry, wiring, raw, rpc, freshAsks, bus) {
   let prepared;
+  const trace = {
+    sessionID: "unknown",
+    agent: "unknown",
+    account: accountOf(plain5(raw) ? raw["input"] : void 0),
+    consumer: "unknown",
+    allowedBy: "none"
+  };
+  const started = performance.now();
   try {
-    if (!plain4(raw)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope must be an object", `Pass {"sessionID":"<session>","input":<the method's input>}.`));
+    if (!plain5(raw)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope must be an object", `Pass {"sessionID":"<session>","input":<the method's input>}.`));
     const sessionID = raw["sessionID"];
     if (typeof sessionID !== "string" || sessionID === "") throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope needs a sessionID", "Pass the session the call runs as."));
+    trace.sessionID = sessionID;
     const input = raw["input"];
-    if (!plain4(input)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope needs an input object", "Pass the method's input as the envelope's input."));
+    if (!plain5(input)) throw new RegisterError(refusal("INPUT_INVALID", "the RPC envelope needs an input object", "Pass the method's input as the envelope's input."));
     const resolved = await rulesOf(context, sessionID);
+    trace.agent = resolved.agent;
+    trace.consumer = typeof raw["consumer"] === "string" && raw["consumer"] !== "" ? raw["consumer"] : resolved.agent;
     const nonRead = entry.item.class !== "read";
     if (entry.item.effect === "deny") {
       throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is off under the plugin's access setting`, "Change the method's effect or the plugin's access setting."));
@@ -577,6 +672,7 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
     const callID = `rpc:${randomUUID2()}`;
     let gated = false;
     let fresh = false;
+    let readAllowedBy = "rule";
     if (nonRead) {
       if (level === "read-only") {
         throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is a ${entry.item.class} and the plugin's access is read-only`, "Set access to ask-changes, or use the agent tool in a session that allows it."));
@@ -584,6 +680,7 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
       if (raw["grant"] !== void 0) {
         if (wiring === void 0) throw new RegisterError(refusal("GRANT_INVALID", "this plugin has no grant verifier, so it cannot accept a grant", "Use a permission ask in a session, or configure the plugin's grant verifier."));
         prepared = prepareCall(entry, input, environment.accounts, environment.plans);
+        trace.account = prepared.account;
         const checked = await verify(environment, wiring, raw, entry, prepared.account);
         if (!checked.ok) {
           const failure = entry.item.commits !== void 0 && checked.code === "GRANT_ACCOUNT_MISMATCH" ? refusal("ACCOUNT_MISMATCH", "the grant names another account than the plan", "Issue the grant for the account the plan was made for.") : checked.refusal;
@@ -592,9 +689,11 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
         if (callEffect(environment.name, entry, prepared.account, resolved.rules) === "deny") {
           throw new RegisterError(refusal("PERMISSION_DENIED", `${environment.name}.${entry.name} is denied for this session's agent`, "Use a session whose agent allows it."));
         }
+        trace.allowedBy = "grant";
         gated = true;
       } else {
         prepared = prepareCall(entry, input, environment.accounts, environment.plans);
+        trace.account = prepared.account;
         const effect = callEffect(environment.name, entry, prepared.account, resolved.rules);
         if (effect === "allow") {
           await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID, signal: rpc.signal }, prepared.account, { save: false });
@@ -605,6 +704,8 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
       }
     } else {
       prepared = prepareCall(entry, input, environment.accounts, environment.plans);
+      trace.account = prepared.account;
+      readAllowedBy = callEffect(environment.name, entry, prepared.account, resolved.rules) === "ask" ? "ask" : "rule";
     }
     if (prepared === void 0) throw new RegisterError(refusal("UNAVAILABLE", "the RPC call prepared no input", "Try again; if it keeps failing, check the plugin's status."));
     if (!gated) {
@@ -612,6 +713,7 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
       if (fresh) freshAsks.add(callID);
       try {
         await gate(context, environment.name, entry, { sessionID, agent: resolved.agent, messageID: "msg_rpc", id: callID, signal: rpc.signal }, prepared.account, { save: false, source });
+        trace.allowedBy = nonRead ? "ask" : readAllowedBy;
       } catch (error) {
         throw new RegisterError(permissionRefusal(error, `${environment.name}.${entry.name}`));
       } finally {
@@ -622,11 +724,14 @@ async function invoke(context, environment, level, entry, wiring, raw, rpc, fres
     const id = `rpc:${randomUUID2()}`;
     const value = await execute(environment, entry, prepared, { sessionID, agent: resolved.agent, messageID, id, signal: rpc.signal, progress: async () => {
     }, door: "rpc" }, bus);
-    return value === void 0 ? null : JSON.parse(JSON.stringify(value));
+    const answer = value === void 0 ? null : JSON.parse(JSON.stringify(value));
+    environment.telemetry.record({ entry, door: "rpc", trace, outcome: "ok", durationMs: performance.now() - started, value: answer });
+    return answer;
   } catch (error) {
     if (prepared?.reservation !== void 0) environment.plans.release(prepared.reservation);
     const own = refusalOf(error);
     const failure = own ?? refusal("UNAVAILABLE", "the RPC call failed", "Try again; if it keeps failing, check the plugin's status.");
+    environment.telemetry.record({ entry, door: "rpc", trace, outcome: failure.code, durationMs: performance.now() - started });
     return rpc.error("failed", failure.message, { code: failure.code, next: failure.next });
   }
 }
@@ -680,17 +785,31 @@ function toolRegistrations(environment, context, bus) {
     options: { namespace: environment.name, permission: `${environment.name}.${entry.name}`, codemode: codemodeFor(entry) },
     async execute(raw, callContext) {
       let prepared;
+      const door = callContext.codemode === true ? "codemode" : "tool";
+      const trace = {
+        sessionID: callContext.sessionID,
+        agent: callContext.agent,
+        account: accountOf(raw),
+        consumer: callContext.agent.trim() === "" ? "unknown" : callContext.agent,
+        allowedBy: "none"
+      };
+      const started = performance.now();
       try {
         prepared = prepareCall(entry, raw, environment.accounts, environment.plans);
+        trace.account = prepared.account;
         await gate(context, environment.name, entry, callContext, prepared.account, {
           save: true,
           source: { type: "tool", messageID: callContext.messageID, id: callContext.id }
         });
-        const value = await execute(environment, entry, prepared, toolCall(callContext, callContext.codemode === true ? "codemode" : "tool"), bus);
+        trace.allowedBy = entry.item.class === "read" ? "rule" : "ask";
+        const value = await execute(environment, entry, prepared, toolCall(callContext, door), bus);
+        environment.telemetry.record({ entry, door, trace, outcome: "ok", durationMs: performance.now() - started, value });
         return { output: value, content: textOf(value) };
       } catch (error) {
         if (prepared?.reservation !== void 0) environment.plans.release(prepared.reservation);
-        throw new Error(error instanceof RegisterError ? error.message : permissionRefusal(error, `${environment.name}.${entry.name}`).message);
+        const failure = error instanceof RegisterError ? error.refusal : permissionRefusal(error, `${environment.name}.${entry.name}`);
+        environment.telemetry.record({ entry, door, trace, outcome: failure.code, durationMs: performance.now() - started });
+        throw new Error(failure.message);
       }
     }
   }));
@@ -755,7 +874,8 @@ async function register(context, manifest, handlers, wiring = {}) {
     throw new Error(access.problems.join("\n"));
   }
   return withCleanup([() => access.dispose()], async () => {
-    const environment = prepare(manifest, handlers, accounts, access, async () => (await context.agent.list()).data);
+    const telemetry = createRegisterTelemetry(manifest, wiring.telemetry);
+    const environment = prepare(manifest, handlers, accounts, access, async () => (await context.agent.list()).data, telemetry);
     let bus;
     const writer = () => bus;
     const rpc = await installRpc(context, environment, access.level, wiring.grant, writer);

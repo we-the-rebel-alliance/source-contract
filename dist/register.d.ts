@@ -15,6 +15,7 @@
  */
 export { register } from "./register/register.js";
 export type { RegisterContext, RegisterWiring, Registration } from "./register/register.js";
+export type { TelemetryWiring } from "./register/telemetry.js";
 export { assertHost } from "./register/host.js";
 export type { HostContext } from "./register/host.js";
 export { methodEntries } from "./register/handlers.js";
